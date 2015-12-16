@@ -87,7 +87,7 @@ window.onload = function () {
 
   // Load image functionality.
   (function () {
-    var image, loader, reader;
+    var image, lastImage, loader, reader, saver;
 
     // Construct an image element for putting loaded images into. When it loads
     // an image, draw it as a pattern immediately.
@@ -107,19 +107,30 @@ window.onload = function () {
 
     // Construct a reader that writes its result to the source of the image.
     reader = new FileReader();
-    reader.onloadend = function () {
+    reader.onload = function () {
+      // Fetch the file that was just loaded.
+      var file = loader.files[0];
+
+      // Save the information about the image.
+      lastImage =
+        { "name": file.name
+        , "type": file.type
+        , "url": this.result
+        };
+
       // If localStorage is available, use it to save the last loaded image.
       if (typeof localStorage === "object") {
-        localStorage.image = this.result;
+        localStorage.lastImage = JSON.stringify(lastImage);
       }
 
       // Set the source of the image, triggering the onload event above.
-      image.src = this.result;
+      image.src = lastImage.url;
     };
 
     // If an image was stored in localStorage, use that for an initial pattern.
-    if (typeof localStorage === "object" && localStorage.image) {
-      image.src = localStorage.image;
+    if (typeof localStorage === "object" && localStorage.lastImage) {
+      lastImage = JSON.parse(localStorage.lastImage);
+      image.src = lastImage.url;
     }
 
     // Construct a file loader for images.
@@ -136,9 +147,25 @@ window.onload = function () {
       }
     };
 
-    // Use a regular button which activates the private file loader.
+    // Use a regular button to activate the private file loader.
     document.getElementById("load-image").onclick = function () {
       loader.click();
+    };
+
+    // Construct a file save link.
+    saver = document.createElement("a");
+
+    // Use a regular button to activate the private file saver.
+    document.getElementById("save-image").onclick = function () {
+      // Fetch the preview canvas as the output image. In the future this should
+      // be a private canvas which has the appropriate dimensions.
+      var canvas = document.getElementById("preview-canvas");
+
+      // Calculate the name and type of the output file from the input, and
+      // trigger the save.
+      saver.download = "catseye-" + lastImage.name;
+      saver.href = canvas.toDataURL(lastImage.type);
+      saver.click();
     };
   }());
 };
