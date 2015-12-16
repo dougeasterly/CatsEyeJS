@@ -1,0 +1,148 @@
+// Wait until the elements and the example image have loaded.
+window.onload = function () {
+  "use strict";
+
+  // Draw a triangle clipping of the image.
+  //
+  // Note that we have to overcompensate on the edges of the hypotenuse,
+  // otherwise the rendering in some browsers can leave a layout pixel blank
+  // between the eventual rotations.
+  function drawTriangle(image, context, size) {
+    context.save();
+    context.beginPath();
+    context.moveTo(-0.5, 0);
+    context.lineTo(size, 0);
+    context.lineTo(size, size + 0.5);
+    context.lineTo(-0.5, 0);
+    context.clip();
+    context.drawImage(image, 0, 0, size, size);
+    context.restore();
+  }
+
+  function drawTriangles(image, context, size) {
+    var i, j;
+
+    // Draw a triangle and its reflection at each of four rotations around the
+    // origin.
+    for (i = 0; i < 4; i += 1) {
+      for (j = 0; j < 2; j += 1) {
+        context.scale(1, -1);
+        drawTriangle(image, context, size);
+      }
+
+      context.rotate(Math.PI / 2);
+    }
+  }
+
+  function makePattern(image) {
+    var canvas, context, size;
+
+    // Grab the image and the canvas, and get the size of the image's smallest
+    // dimension.
+    canvas = document.createElement("canvas");
+    size = Math.min(image.width, image.height);
+
+    // Make the canvas a square with edges of length the size.
+    canvas.width = canvas.height = size * 2;
+
+    // Grab the context, and move the origin into the middle of the canvas.
+    context = canvas.getContext("2d");
+    context.translate(size, size);
+
+    drawTriangles(image, context, size);
+
+    return canvas;
+  }
+
+  // Fill the screen with the larger canvas, and draw the smaller canvas as a
+  // repeating pattern on the larger canvas.
+  function drawPattern(layout) {
+    var canvas, container, context, height, pattern, size, width;
+
+    // Fetch the size of the layout canvas, which is assumed to be a square. The
+    // size of the image is half of the size of the canvas.
+    size = layout.width / 2;
+
+    // Now grab the canvas and context of the larger canvas, and fetch the
+    // previous cavnas as a repeating pattern in the larger context.
+    canvas = document.getElementById("preview-canvas");
+    context = canvas.getContext("2d");
+    pattern = context.createPattern(layout, "repeat");
+
+    // Set the size of the larger canvas to the size of the container.
+    container = document.getElementById("preview");
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
+
+    // Prepare to center the drawing by fetching the point in the middle of the
+    // screen.
+    width = canvas.width / 2;
+    height = canvas.height / 2;
+
+    // Move the origin to the center of the canvas, then back by half the size
+    // of the small canvas, and then draw a rectangle from back at the top left
+    // corner to the size of the large canvas. Fill the rectangle with the
+    // contexting pattern of the smaller canvas.
+    context.translate(width - size, height - size);
+    context.rect(-width + size, -height + size, width * 2, height * 2);
+    context.fillStyle = pattern;
+    context.fill();
+  }
+
+  // Load image functionality.
+  (function () {
+    var image, loader, reader;
+
+    // Construct an image element for putting loaded images into. When it loads
+    // an image, draw it as a pattern immediately.
+    image = document.createElement("img");
+    image.onload = function () {
+      var pattern = makePattern(this);
+
+      // Resize and draw on the larger canvas as soon as everything is ready.
+      drawPattern(pattern);
+
+      // When the window is resized, resize the canvas to fill the new screen
+      // size.
+      window.onresize = function () {
+        drawPattern(pattern);
+      };
+    };
+
+    // Construct a reader that writes its result to the source of the image.
+    reader = new FileReader();
+    reader.onloadend = function () {
+      // If localStorage is available, use it to save the last loaded image.
+      if (typeof localStorage === "object") {
+        localStorage.image = this.result;
+      }
+
+      // Set the source of the image, triggering the onload event above.
+      image.src = this.result;
+    };
+
+    // If an image was stored in localStorage, use that for an initial pattern.
+    if (typeof localStorage === "object" && localStorage.image) {
+      image.src = localStorage.image;
+    }
+
+    // Construct a file loader for images.
+    loader = document.createElement("input");
+    loader.type = "file";
+    loader.accept = "image/*";
+    loader.onchange = function () {
+      var file = this.files[0];
+
+      // Check if a file was provided. Might be worth checking the type of the
+      // file is an image in the future.
+      if (file) {
+        reader.readAsDataURL(file);
+      }
+    };
+
+    // Use a regular button which activates the private file loader.
+    document.getElementById("load-image").onclick = function () {
+      loader.click();
+    };
+  }());
+};
