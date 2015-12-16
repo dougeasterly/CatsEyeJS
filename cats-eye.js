@@ -87,7 +87,10 @@ window.onload = function () {
 
   // Load image functionality.
   (function () {
-    var image, lastImage, loader, reader, saver;
+    var image, lastImage, loader, reader, saveButton, saver;
+
+    // Retrieve the save button to enable it when an image is loaded.
+    saveButton = document.getElementById("save-image");
 
     // Construct an image element for putting loaded images into. When it loads
     // an image, draw it as a pattern immediately.
@@ -103,6 +106,8 @@ window.onload = function () {
       window.onresize = function () {
         drawPattern(pattern);
       };
+
+      saveButton.disabled = false;
     };
 
     // Construct a reader that writes its result to the source of the image.
@@ -156,7 +161,7 @@ window.onload = function () {
     saver = document.createElement("a");
 
     // Use a regular button to activate the private file saver.
-    document.getElementById("save-image").onclick = function () {
+    saveButton.onclick = function () {
       // Fetch the preview canvas as the output image. In the future this should
       // be a private canvas which has the appropriate dimensions.
       var canvas = document.getElementById("preview-canvas");
