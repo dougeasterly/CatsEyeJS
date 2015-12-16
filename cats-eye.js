@@ -149,7 +149,7 @@ window.onload = function () {
 
     // Use a regular button to activate the private file loader.
     document.getElementById("load-image").onclick = function () {
-      loader.click();
+      loader.dispatchEvent(new MouseEvent("click"));
     };
 
     // Construct a file save link.
@@ -165,7 +165,7 @@ window.onload = function () {
       // trigger the save.
       saver.download = "catseye-" + lastImage.name;
       saver.href = canvas.toDataURL(lastImage.type);
-      saver.click();
+      saver.dispatchEvent(new MouseEvent("click"));
     };
   }());
 };
