@@ -71,20 +71,16 @@ window.onload = function () {
 
     // Set the size of the larger canvas to the size of the container.
     container = document.getElementById("preview");
-    canvas.width = container.offsetWidth;
-    canvas.height = container.offsetHeight;
-
-    // Prepare to center the drawing by fetching the point in the middle of the
-    // screen.
-    width = canvas.width / 2;
-    height = canvas.height / 2;
+    canvas.width = canvas.height = 0;
+    width = canvas.width = container.offsetWidth;
+    height = canvas.height = container.offsetHeight;
 
     // Move the origin to the center of the canvas, then back by half the size
     // of the small canvas, and then draw a rectangle from back at the top left
     // corner to the size of the large canvas. Fill the rectangle with the
     // contexting pattern of the smaller canvas.
-    context.translate(width - size, height - size);
-    context.rect(-width + size, -height + size, width * 2, height * 2);
+    context.translate(width / 2 - size, height / 2 - size);
+    context.rect(-width / 2 + size, -height / 2 + size, width, height);
     context.fillStyle = pattern;
     context.fill();
   }
