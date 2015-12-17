@@ -75,12 +75,11 @@ window.onload = function () {
     width = canvas.width = container.offsetWidth;
     height = canvas.height = container.offsetHeight;
 
-    // Move the origin to the center of the canvas, then back by half the size
-    // of the small canvas, and then draw a rectangle from back at the top left
-    // corner to the size of the large canvas. Fill the rectangle with the
-    // contexting pattern of the smaller canvas.
-    context.translate(width / 2 - size, height / 2 - size);
-    context.rect(-width / 2 + size, -height / 2 + size, width, height);
+    // Move the origin to the center of the canvas, and then draw a rectangle
+    // from back at the top left corner to the size of the large canvas. Fill
+    // the rectangle with the contexting pattern of the smaller canvas.
+    context.translate(width / 2, height / 2);
+    context.rect(-width / 2, -height / 2, width, height);
     context.fillStyle = pattern;
     context.fill();
   }
