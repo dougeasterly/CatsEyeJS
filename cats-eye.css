@@ -19,6 +19,10 @@ body {
   padding: 20px;
 }
 
+.save-dimension {
+  width: 50px;
+}
+
 #preview {
   flex-grow: 1;
 }
