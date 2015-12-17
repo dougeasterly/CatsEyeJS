@@ -166,54 +166,13 @@ function loadImageAsElement(url, callback) {
   image.src = url;
 }
 
-// Trigger a save of the given canvas as an image download with the given name
-// and media type.
-function saveCanvas(name, type, canvas) {
-  // Construct a link to simulate a click on.
-  var link = document.createElement("a");
-
-  // Calculate the name and type of the output file from the input, and
-  // trigger the save.
-  link.download = "catseye-" + name;
-  link.href = canvas.toDataURL(type);
-  link.dispatchEvent(new MouseEvent("click"));
-}
-
-// Render and download the currently loaded pattern.
-function saveImage(name, type, pattern, rendering) {
-  var canvas, height, width;
-
-  // Fetch the requested width and height of the output image.
-  width = rendering.width.value;
-  height = rendering.height.value;
-
-  // Draw and save the output.
-  canvas = drawOutput(pattern, width, height);
-  saveCanvas(name, type, canvas);
-}
-
 // Load and preview the image at the given URL, and set up the save button to
 // download the rendered image with all of the given information.
-function previewImage(name, type, url, rendering) {
+function patternFromUrl(url, callback) {
   // Load the URL into an image.
   loadImageAsElement(url, function (image) {
-    // Make a pattern of the image.
-    var pattern = makePattern(image);
-
-    // Preview the resulting pattern.
-    drawPreview(pattern, rendering.canvas);
-
-    // When the window is resized, resize the canvas to fill the new screen
-    // size.
-    window.onresize = function () {
-      drawPreview(pattern, rendering.canvas);
-    };
-
-    // Enable the save button, and trigger a save when it is clicked.
-    rendering.saveButton.disabled = false;
-    rendering.saveButton.onclick = function () {
-      saveImage(name, type, pattern, rendering);
-    };
+    // Make a pattern of the image and pass it to the callback.
+    callback(makePattern(image));
   });
 }
 
@@ -251,26 +210,15 @@ function fetchLastImage() {
   return null;
 }
 
-// Try and load the last image as a pattern, if such an image exists, using the
-// given rendering context.
-function reloadLastImage(rendering) {
-  var image = fetchLastImage();
-
-  if (image !== null) {
-    previewImage(image.name, image.type, image.url, rendering);
-  }
-}
-
-// Read, store, and preview an image file as a pattern using the given rendering
-// context.
-function loadAndPreviewImage(file, rendering) {
+// Read, store, and return an image file as a pattern to the given callback.
+function loadAndStoreFromFile(file, callback) {
   // Read the selected file as a URL.
   readImageAsURL(file, function (url) {
     // Store the selected and read file's information.
     storeLastImage(file.name, file.type, url);
 
-    // Preview the image.
-    previewImage(file.name, file.type, url, rendering);
+    // Construct the pattern from the resulting URL.
+    patternFromUrl(callback);
   });
 }
 
@@ -295,52 +243,129 @@ function fetchDimension(name) {
   return NaN;
 }
 
+// Validate the value of a dimension element and store the resulting value in
+// the store if possible.
+function validateAndStoreDimension(element) {
+  if (element.value < element.min) {
+    // If the value is too small, set it back to the minimum.
+    element.value = element.min;
+  } else {
+    // Force the value to be an integer.
+    element.value = Math.floor(element.value);
+  }
+
+  // Store the value in persistent storage.
+  storeDimension(element.dataset.dimension, element.value);
+}
+
+// Set up the preview canvas with the given pattern.
+function previewPattern(canvas, pattern) {
+  // Preview the resulting pattern.
+  drawPreview(pattern, canvas);
+
+  // When the window is resized, resize the canvas to fill the new screen
+  // size.
+  window.onresize = function () {
+    drawPreview(pattern, canvas);
+  };
+}
+
+// Trigger a save of the given canvas as an image download with the given name
+// and media type.
+function saveCanvas(name, type, canvas) {
+  // Construct a link to simulate a click on.
+  var link = document.createElement("a");
+
+  // Calculate the name and type of the output file from the input, and
+  // trigger the save.
+  link.download = name;
+  link.href = canvas.toDataURL(type);
+  link.dispatchEvent(new MouseEvent("click"));
+}
+
+// Render and download the currently loaded pattern.
+function saveImage(name, type, pattern, width, height) {
+  var canvas;
+
+  // Draw and save the output.
+  canvas = drawOutput(pattern, width, height);
+  saveCanvas(name, type, canvas);
+}
+
+// Enable the save button and hook up its click event to the given callback.
+function enableSaveButton(saveButton, callback) {
+  // Enable the save button, and trigger a save when it is clicked.
+  saveButton.disabled = false;
+  saveButton.onclick = callback;
+}
+
+// Try and load the last image as a pattern, if such an image exists, passing
+// the result to the given callback.
+function reloadLastImage(callback) {
+  var image = fetchLastImage();
+
+  if (image !== null) {
+    patternFromUrl(image.url, callback);
+  }
+}
+
+// Set the initial values of the dimensions if they are in the store.
+function reloadLastDimension(name, element) {
+  // Fetch the last dimension value.
+  var value = fetchDimension(element.dataset.dimension);
+
+  // If the value existed, set the element's value.
+  if (!isNaN(value)) {
+    element.value = value;
+  }
+}
+
 // Set up the button events once the page is loaded.
 window.onload = function () {
-  // Set up the rendering context with the appropriate elements.
-  var rendering = {
-    "canvas": document.getElementById("preview-canvas"),
-    "saveButton": document.getElementById("save-image"),
-    "width": document.getElementById("save-width"),
-    "height": document.getElementById("save-height")
-  };
+  var canvas, height, saveButton, width;
+
+  // Retrieve the appropriate elements from the page.
+  canvas = document.getElementById("preview-canvas");
+  saveButton = document.getElementById("save-image");
+  width = document.getElementById("save-width");
+  height = document.getElementById("save-height");
+
+  function setupFromImageInfo(name, type, pattern) {
+    // Preview the resulting pattern.
+    previewPattern(canvas, pattern);
+
+    // Enable the save button.
+    enableSaveButton(saveButton, function () {
+      // Save the image.
+      saveImage("cats-eye-" + name, type, pattern, width.value, height.value);
+    });
+  }
 
   // Select and load an image when the load image button is clicked.
   document.getElementById("load-image").onclick = function () {
+    // Prompt for an image.
     selectImage(function (file) {
-      loadAndPreviewImage(file, rendering);
+      // Load the image as a pattern and store it if possible.
+      loadAndStoreFromFile(file, function (pattern) {
+        // Set up the preview and save button from the image information.
+        setupFromImageInfo(file.name, file.type, pattern);
+      });
     });
   };
 
   // Set up both dimension inputs.
-  ["width", "height"].forEach(function (name) {
-    var element, value;
-
-    // Fetch the dimension input. It's already stored in the rendering context,
-    // so just grab it from there.
-    element = rendering[name];
+  [width, height].forEach(function (element) {
+    var value;
 
     // Store the values of the dimensions when they change.
     element.onchange = function () {
-      if (this.value < this.min) {
-        // If the value is too small, set it back to the minimum.
-        this.value = this.min;
-      } else {
-        // Force the value to be an integer.
-        this.value = Math.floor(this.value);
-      }
-
-      // Store the value in persistent storage.
-      storeDimension(name, this.value);
+      validateAndStoreDimension(element);
     };
 
-    // Set the initial values of the dimensions.
-    value = fetchDimension(name);
-    if (!isNaN(value)) {
-      element.value = value;
-    }
+    // Load the last used value for this dimension, if possible.
+    reloadLastDimension(element);
   });
 
   // Load the last used image from the store if possible.
-  reloadLastImage(rendering);
+  reloadLastImage(setupFromImageInfo);
 };
