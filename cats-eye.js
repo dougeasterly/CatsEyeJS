@@ -21,14 +21,14 @@ function drawTriangle(image, context, size) {
 function drawTriangles(image, context, size) {
   var i, j;
 
-  // Draw a triangle and its reflection at each of four rotations around the
-  // origin.
   for (i = 0; i < 4; i += 1) {
     for (j = 0; j < 2; j += 1) {
+      // Draw a triangle and its reflection.
       context.scale(1, -1);
       drawTriangle(image, context, size);
     }
 
+    // Draw that at each of 4 rotation points around the origin.
     context.rotate(Math.PI / 2);
   }
 }
@@ -41,13 +41,15 @@ function makePattern(image) {
   canvas = document.createElement("canvas");
   size = Math.min(image.width, image.height);
 
-  // Make the canvas a square with edges of length the size.
+  // Make the canvas a square with edges of length twice the size of the image,
+  // given that the image will be drawn twice in both dimensions.
   canvas.width = canvas.height = size * 2;
 
   // Grab the context, and move the origin into the middle of the canvas.
   context = canvas.getContext("2d");
   context.translate(size, size);
 
+  // Draw the pattern.
   drawTriangles(image, context, size);
 
   return canvas;
