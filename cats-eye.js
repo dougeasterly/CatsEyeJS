@@ -28,17 +28,20 @@ function drawTriangles(image, context, size) {
       drawTriangle(image, context, size);
     }
 
-    // Draw that at each of 4 rotation points around the origin.
+    // Draw the inner loop at each of 4 rotation points around the origin.
     context.rotate(Math.PI / 2);
   }
 }
 
+// Make a single render on a new canvas from the given image, to be repeated as
+// a pattern.
 function makePattern(image) {
   var canvas, context, size;
 
-  // Grab the image and the canvas, and get the size of the image's smallest
-  // dimension.
+  // Create the canvas to draw the pattern on.
   canvas = document.createElement("canvas");
+
+  // Get the size of the image's smallest dimension.
   size = Math.min(image.width, image.height);
 
   // Make the canvas a square with edges of length twice the size of the image,
@@ -55,35 +58,29 @@ function makePattern(image) {
   return canvas;
 }
 
-// Fill the screen with the larger canvas, and draw the smaller canvas as a
-// repeating pattern on the larger canvas.
-function drawPattern(canvas, layout) {
-  var context, height, pattern, size, width;
+// Draw the pattern onto the given canvas.
+function drawPattern(canvas, pattern) {
+  var context, height, repeated, width;
 
-  // Fetch the size of the layout canvas, which is assumed to be a square. The
-  // size of the image is half of the size of the canvas.
-  size = layout.width / 2;
-
-  // Now grab the context of the preview canvas, and turn the given layout
-  // into a repeating pattern in the context.
+  // Grab the context of the canvas, and repeat the pattern in the context.
   context = canvas.getContext("2d");
-  pattern = context.createPattern(layout, "repeat");
+  repeated = context.createPattern(pattern, "repeat");
 
   // Fetch the width and height of the canvas.
   width = canvas.width;
   height = canvas.height;
 
-  // Move the origin to the center of the canvas, and then draw a rectangle
-  // from back at the top left corner to the size of the large canvas. Fill
-  // the rectangle with the contexting pattern of the smaller canvas.
+  // Move the origin to the center of the canvas, and then draw a rectangle from
+  // back at the top left corner to the size of the large canvas. Fill the
+  // rectangle with the repeating pattern of the smaller canvas.
   context.translate(width / 2, height / 2);
   context.rect(-width / 2, -height / 2, width, height);
-  context.fillStyle = pattern;
+  context.fillStyle = repeated;
   context.fill();
 }
 
 // Draw the pattern onto the given canvas, resizing it to fill its container.
-function drawPreview(pattern, canvas) {
+function drawPreview(canvas, pattern) {
   // Fetch the container of the canvas.
   var container = canvas.parentNode;
 
@@ -103,7 +100,7 @@ function drawPreview(pattern, canvas) {
 // Draw the pattern on a new canvas of the given width and height for output,
 // and return the resulting canvas.
 function drawOutput(pattern, width, height) {
-  // Construct the canvas with the given width and height;
+  // Construct a canvas with the given width and height.
   var canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -166,9 +163,8 @@ function loadImageAsElement(url, callback) {
   image.src = url;
 }
 
-// Load and preview the image at the given URL, and set up the save button to
-// download the rendered image with all of the given information.
-function patternFromUrl(url, callback) {
+// Load the image at the given URL and build a pattern from it.
+function patternFromURL(url, callback) {
   // Load the URL into an image.
   loadImageAsElement(url, function (image) {
     // Make a pattern of the image and pass it to the callback.
@@ -177,8 +173,8 @@ function patternFromUrl(url, callback) {
 }
 
 // Try and save the given data about an image in the persistent store as the
-// most recent image to be loaded. Does nothing if localStorage is not
-// supported.
+// most recent image to be loaded. Does nothing if local storage is not
+// supported by the platform.
 function storeLastImage(name, type, url) {
   // Check if localStorage is available.
   if (typeof localStorage === "object") {
@@ -192,7 +188,7 @@ function storeLastImage(name, type, url) {
 }
 
 // Try to fetch data about the most recent image. Returns null if no image has
-// been saved of if localStorage is not supported.
+// been saved of if local storage is not supported by the platform.
 function fetchLastImage() {
   // Check if localStorage is available, and if an image has been saved.
   if (typeof localStorage === "object" && localStorage.image) {
@@ -218,12 +214,12 @@ function loadAndStoreFromFile(file, callback) {
     storeLastImage(file.name, file.type, url);
 
     // Construct the pattern from the resulting URL.
-    patternFromUrl(callback);
+    patternFromURL(url, callback);
   });
 }
 
 // Try and save the given dimension value in the persistent store for the given
-// name. Does nothing if localStorage is not supported.
+// name. Does nothing if local storage is not supported by the platform.
 function storeDimension(name, value) {
   // Check if localStorage is available.
   if (typeof localStorage === "object") {
@@ -232,7 +228,7 @@ function storeDimension(name, value) {
 }
 
 // Try to fetch the stored value for the given dimension. Returns NaN if no
-// value has been saved of if localStorage is not supported.
+// value has been saved of if local storage is not supported by the platform.
 function fetchDimension(name) {
   // Check if localStorage is available, and if a dimension has been stored.
   if (typeof localStorage === "object" && localStorage[name]) {
@@ -260,14 +256,11 @@ function validateAndStoreDimension(element) {
 
 // Set up the preview canvas with the given pattern.
 function previewPattern(canvas, pattern) {
-  // Preview the resulting pattern.
-  drawPreview(pattern, canvas);
-
   // When the window is resized, resize the canvas to fill the new screen
-  // size.
-  window.onresize = function () {
-    drawPreview(pattern, canvas);
-  };
+  // size, and preview the resulting pattern now.
+  (window.onresize = function () {
+    drawPreview(canvas, pattern);
+  })();
 }
 
 // Trigger a save of the given canvas as an image download with the given name
@@ -300,17 +293,20 @@ function enableSaveButton(saveButton, callback) {
 }
 
 // Try and load the last image as a pattern, if such an image exists, passing
-// the result to the given callback.
+// the image's name, type, and loaded pattern to the given callback.
 function reloadLastImage(callback) {
   var image = fetchLastImage();
 
+  // If an image was present, load it and pass its information to the callback.
   if (image !== null) {
-    patternFromUrl(image.url, callback);
+    patternFromURL(image.url, function (pattern) {
+      callback(image.name, image.type, pattern);
+    });
   }
 }
 
 // Set the initial values of the dimensions if they are in the store.
-function reloadLastDimension(name, element) {
+function reloadLastDimension(element) {
   // Fetch the last dimension value.
   var value = fetchDimension(element.dataset.dimension);
 
