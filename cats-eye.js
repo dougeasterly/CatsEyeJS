@@ -294,7 +294,7 @@ function enableSaveButton(saveButton, callback) {
 
 // Try and load the last image as a pattern, if such an image exists, passing
 // the image's name, type, and loaded pattern to the given callback.
-function reloadLastImage(callback) {
+function tryReloadLastImage(callback) {
   var image = fetchLastImage();
 
   // If an image was present, load it and pass its information to the callback.
@@ -306,7 +306,7 @@ function reloadLastImage(callback) {
 }
 
 // Set the initial values of the dimensions if they are in the store.
-function reloadLastDimension(element) {
+function tryReloadLastDimension(element) {
   // Fetch the last dimension value.
   var value = fetchDimension(element.dataset.dimension);
 
@@ -326,6 +326,22 @@ window.onload = function () {
   width = document.getElementById("save-width");
   height = document.getElementById("save-height");
 
+  // Set up a given output dimension input.
+  function setupDimensionInput(element) {
+    // Store the values of the dimensions when they change.
+    element.onchange = function () {
+      validateAndStoreDimension(element);
+    };
+
+    // Load the last used value for this dimension, if possible.
+    tryReloadLastDimension(element);
+  }
+
+  // Perform the dimension input setup for both inputs.
+  setupDimensionInput(width);
+  setupDimensionInput(height);
+
+  // Set up the preview image and save button from the given image information.
   function setupFromImageInfo(name, type, pattern) {
     // Preview the resulting pattern.
     previewPattern(canvas, pattern);
@@ -349,19 +365,6 @@ window.onload = function () {
     });
   };
 
-  // Set up both dimension inputs.
-  [width, height].forEach(function (element) {
-    var value;
-
-    // Store the values of the dimensions when they change.
-    element.onchange = function () {
-      validateAndStoreDimension(element);
-    };
-
-    // Load the last used value for this dimension, if possible.
-    reloadLastDimension(element);
-  });
-
-  // Load the last used image from the store if possible.
-  reloadLastImage(setupFromImageInfo);
+  // Load the last used image, if possible.
+  tryReloadLastImage(setupFromImageInfo);
 };
