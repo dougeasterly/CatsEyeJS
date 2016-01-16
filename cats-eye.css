@@ -14,9 +14,12 @@ body {
 }
 
 #interface {
-  flex-shrink: 0;
   border-right: 1px solid black;
   padding: 20px;
+}
+
+.group {
+  display: inline-block;
 }
 
 .save-dimension {
@@ -24,5 +27,5 @@ body {
 }
 
 #preview {
-  flex-grow: 1;
+  flex: 1 1 50%;
 }
