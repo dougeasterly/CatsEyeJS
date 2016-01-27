@@ -11,17 +11,19 @@
     <section id="interface">
       <div id="image-inputs">
         <button id="load-image">Load Image</button>
-        <button id="save-image" disabled>Save Image</button>
         <div class="group">
+          <button id="save-image" disabled>Save Image</button>
           <div class="group">
-            <label for="save-width">Width</label>
-            <input id="save-width" class="save-dimension" data-dimension="width"
-                  type="number" min="1" value="200">
-          </div>
-          <div class="group">
-            <label for="save-height">Height</label>
-            <input id="save-height" class="save-dimension" data-dimension="height"
-                  type="number" min="1" value="200">
+            <div class="labelled">
+              <label for="save-width">Width</label>
+              <input id="save-width" class="save-dimension" data-dimension="width"
+                    type="number" min="1" value="1000">
+            </div>
+            <div class="labelled">
+              <label for="save-height">Height</label>
+              <input id="save-height" class="save-dimension" data-dimension="height"
+                    type="number" min="1" value="1000">
+            </div>
           </div>
         </div>
       </div>
