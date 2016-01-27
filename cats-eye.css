@@ -45,6 +45,12 @@ body, button, input {
   margin: 0px;
 }
 
+#save-dimensions {
+  display: none;
+  transition-duration: 1s;
+  transition-timing-function: ease-in;
+}
+
 input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0px;

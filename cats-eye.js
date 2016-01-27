@@ -317,7 +317,7 @@ function tryReloadLastDimension(element) {
 }
 
 // Set up the button events once the page is loaded.
-window.onload = function () {
+window.addEventListener("load", function () {
   var canvas, height, saveButton, width;
 
   // Retrieve the appropriate elements from the page.
@@ -325,6 +325,13 @@ window.onload = function () {
   saveButton = document.getElementById("save-image");
   width = document.getElementById("save-width");
   height = document.getElementById("save-height");
+
+  // Clicking on a label when the values are set by the corresponding attribute
+  // in the element can cause the caret to end up on the wrong side of the
+  // number. Setting them here reminds the browser that there are already
+  // numbers in the boxes.
+  width.value = width.value;
+  height.value = height.value;
 
   // Set up a given output dimension input.
   function setupDimensionInput(element) {
@@ -367,4 +374,32 @@ window.onload = function () {
 
   // Load the last used image, if possible.
   tryReloadLastImage(setupFromImageInfo);
-};
+});
+
+// Set up the save dimension interface.
+window.addEventListener("load", function () {
+  var dimensions, saveGroup, timeout;
+
+  // Fetch the groups around the elements.
+  saveGroup = document.getElementById("save-group");
+  dimensions = document.getElementById("save-dimensions");
+
+  // Have the save dimension inputs appear when the group surrounding both is
+  // hovered over.
+  saveGroup.onmouseover = function () {
+    clearTimeout(timeout);
+    dimensions.style.transitionProperty = "none";
+    dimensions.style.opacity = 1;
+    dimensions.style.display = "inline-block";
+  };
+
+  // Have the save dimension inputs disappear over a second, and finally no
+  // longer be displayed.
+  saveGroup.onmouseout = function () {
+    dimensions.style.transitionProperty = "opacity";
+    dimensions.style.opacity = 0;
+    timeout = setTimeout(function () {
+      dimensions.style.display = "none";
+    }, 1000);
+  };
+});
