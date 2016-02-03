@@ -14,26 +14,46 @@ function pathTriangle(context, width, height) {
   context.closePath();
 }
 
+// Draw a circle on the given context at a position and with a radius. Set the
+// fill-style beforehand to modify how the circle is drawn.
+function drawCircle(context, x, y, radius) {
+  context.beginPath();
+  context.arc(x, y, radius, 0, 2 * Math.PI);
+  context.closePath();
+  context.fill();
+}
+
 // Resize the given canvas to the aspect ratio of the given image, and draw the
 // image on it.
 function drawSelection(canvas, image) {
-  var context, padding;
+  var context, radius;
 
   context = canvas.getContext("2d");
 
-  // The padding inside the canvas around the rendered image.
-  padding = 7;
+  // Define the radius of the selection triangle corner circles.
+  radius = 7;
 
   // Resize the canvas to the size of the image.
   // TODO This should have a limit based on the size of the page.
-  canvas.width = image.width + padding * 2;
-  canvas.height = image.height + padding * 2;
+  canvas.width = 0;
+  canvas.width = image.width + radius * 2 + 1;
+  canvas.height = image.height + radius * 2 + 1;
 
-  // Ensure that the padding is left around the image.
-  context.translate(padding, padding);
+  context.translate(radius + 0.5, radius + 0.5);
 
   // Draw the image on the canvas.
   context.drawImage(image, 0, 0, image.width, image.height);
+
+  context.save();
+  pathTriangle(context, image.width, image.height);
+  context.strokeStyle = "black";
+  context.lineWidth = 2;
+  context.stroke();
+  context.fillStyle = "red";
+  drawCircle(context, -0.5, 0, radius);
+  drawCircle(context, image.width, 0, radius);
+  drawCircle(context, image.width, image.height + 0.5, radius);
+  context.restore();
 }
 
 // Draw a triangle clipping of the image.
