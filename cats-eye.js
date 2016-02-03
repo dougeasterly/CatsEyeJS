@@ -26,33 +26,64 @@ function drawCircle(context, x, y, radius) {
 // Resize the given canvas to the aspect ratio of the given image, and draw the
 // image on it.
 function drawSelection(canvas, image) {
-  var context, radius;
+  var context, height, html, radius, width;
 
+  // Fetch the context and prepare to render to it without modifying the state
+  // once the function ends.
   context = canvas.getContext("2d");
+  context.save();
 
   // Define the radius of the selection triangle corner circles.
   radius = 7;
 
-  // Resize the canvas to the size of the image.
-  // TODO This should have a limit based on the size of the page.
-  canvas.width = 0;
-  canvas.width = image.width + radius * 2 + 1;
-  canvas.height = image.height + radius * 2 + 1;
+  // Fetch the size of the original image.
+  width = image.width;
+  height = image.height;
 
-  context.translate(radius + 0.5, radius + 0.5);
+  // Fetch the document element so we can examine its size in comparison to the
+  // image, to ensure the selection preview doesn't take up too much space.
+  html = document.documentElement;
+
+  // If the width of the image exceeds a quarter of the display, shrink the
+  // width to that quarter and the height to match.
+  if (width > html.offsetWidth / 4) {
+    width = html.offsetWidth / 4;
+    height = image.height * (width / image.width);
+  }
+
+  // Whether or not the height has been shrunk, if the height of the image still
+  // exceeds a quarter of the display, shrink the height to that quarter and the
+  // width to match. As this process can only make the width smaller, it does
+  // not invalidate the shrinking above.
+  if (height > html.offsetHeight / 4) {
+    height = html.offsetHeight / 4;
+    width = image.width * (height / image.height);
+  }
+
+  // Resize the canvas to the size of the image, leaving room for the radius of
+  // each triangle corner.
+  canvas.width = width + radius * 2 + 2;
+  canvas.height = height + radius * 2 + 2;
+
+  // Move the origin to take the extra radius room into account.
+  context.translate(radius + 1, radius + 1);
 
   // Draw the image on the canvas.
-  context.drawImage(image, 0, 0, image.width, image.height);
+  context.drawImage(image, 0, 0, width, height);
 
-  context.save();
-  pathTriangle(context, image.width, image.height);
+  // Draw the selection triangle over the top of the image.
   context.strokeStyle = "black";
   context.lineWidth = 2;
+  pathTriangle(context, width, height);
   context.stroke();
+
+  // Draw large circles on the each of the corners of the triangle.
   context.fillStyle = "red";
   drawCircle(context, -0.5, 0, radius);
-  drawCircle(context, image.width, 0, radius);
-  drawCircle(context, image.width, image.height + 0.5, radius);
+  drawCircle(context, width, 0, radius);
+  drawCircle(context, width, height + 0.5, radius);
+
+  // Restore the context state before exiting.
   context.restore();
 }
 
