@@ -1,31 +1,59 @@
 "use strict";
 
-// Draw a triangle clipping of the image.
+// Create a triangle path on the given context of the given size.
 //
 // Note that we have to overcompensate on the edges of the hypotenuse,
 // otherwise the rendering in some browsers can leave a layout pixel blank
 // between the eventual rotations.
-function drawTriangle(image, context, size) {
-  context.save();
+function pathTriangle(context, width, height) {
   context.beginPath();
   context.moveTo(-0.5, 0);
-  context.lineTo(size, 0);
-  context.lineTo(size, size + 0.5);
+  context.lineTo(width, 0);
+  context.lineTo(width, height + 0.5);
   context.lineTo(-0.5, 0);
+  context.closePath();
+}
+
+// Resize the given canvas to the aspect ratio of the given image, and draw the
+// image on it.
+function drawSelection(canvas, image) {
+  var context, padding;
+
+  context = canvas.getContext("2d");
+
+  // The padding inside the canvas around the rendered image.
+  padding = 7;
+
+  // Resize the canvas to the size of the image.
+  // TODO This should have a limit based on the size of the page.
+  canvas.width = image.width + padding * 2;
+  canvas.height = image.height + padding * 2;
+
+  // Ensure that the padding is left around the image.
+  context.translate(padding, padding);
+
+  // Draw the image on the canvas.
+  context.drawImage(image, 0, 0, image.width, image.height);
+}
+
+// Draw a triangle clipping of the image.
+function clipTriangle(image, context, size) {
+  context.save();
+  pathTriangle(context, size, size);
   context.clip();
   context.drawImage(image, 0, 0, size, size);
   context.restore();
 }
 
 // Draw multiple triangles of the given image to make the full pattern.
-function drawTriangles(image, context, size) {
+function clipTriangles(image, context, size) {
   var i, j;
 
   for (i = 0; i < 4; i += 1) {
     for (j = 0; j < 2; j += 1) {
       // Draw a triangle and its reflection.
       context.scale(1, -1);
-      drawTriangle(image, context, size);
+      clipTriangle(image, context, size);
     }
 
     // Draw the inner loop at each of 4 rotation points around the origin.
@@ -53,7 +81,7 @@ function makePattern(image) {
   context.translate(size, size);
 
   // Draw the pattern.
-  drawTriangles(image, context, size);
+  clipTriangles(image, context, size);
 
   return canvas;
 }
@@ -151,7 +179,7 @@ function readImageAsURL(file, callback) {
 
 // Load the image at the given URL, passing the resulting image to the
 // callback once the load completes.
-function loadImageAsElement(url, callback) {
+function buildImageFromURL(url, callback) {
   var image = document.createElement("img");
 
   // Just run the callback with the image once the load completes.
@@ -163,12 +191,15 @@ function loadImageAsElement(url, callback) {
   image.src = url;
 }
 
-// Load the image at the given URL and build a pattern from it.
-function patternFromURL(url, callback) {
-  // Load the URL into an image.
-  loadImageAsElement(url, function (image) {
-    // Make a pattern of the image and pass it to the callback.
-    callback(makePattern(image));
+// Read, store, and return the given image as an element to the given callback.
+function buildAndStoreImageFromFile(file, callback) {
+  // Read the selected file as a URL.
+  readImageAsURL(file, function (url) {
+    // Store the selected and read file's information.
+    storeLastImage(file.name, file.type, url);
+
+    // Construct the image element from the resulting URL.
+    buildImageFromURL(url, callback);
   });
 }
 
@@ -204,18 +235,6 @@ function fetchLastImage() {
   }
 
   return null;
-}
-
-// Read, store, and return an image file as a pattern to the given callback.
-function loadAndStoreFromFile(file, callback) {
-  // Read the selected file as a URL.
-  readImageAsURL(file, function (url) {
-    // Store the selected and read file's information.
-    storeLastImage(file.name, file.type, url);
-
-    // Construct the pattern from the resulting URL.
-    patternFromURL(url, callback);
-  });
 }
 
 // Try and save the given dimension value in the persistent store for the given
@@ -254,15 +273,6 @@ function validateAndStoreDimension(element) {
   storeDimension(element.dataset.dimension, element.value);
 }
 
-// Set up the preview canvas with the given pattern.
-function previewPattern(canvas, pattern) {
-  // When the window is resized, resize the canvas to fill the new screen
-  // size, and preview the resulting pattern now.
-  (window.onresize = function () {
-    drawPreview(canvas, pattern);
-  })();
-}
-
 // Trigger a save of the given canvas as an image download with the given name
 // and media type.
 function saveCanvas(name, type, canvas) {
@@ -299,7 +309,7 @@ function tryReloadLastImage(callback) {
 
   // If an image was present, load it and pass its information to the callback.
   if (image !== null) {
-    patternFromURL(image.url, function (pattern) {
+    buildImageFromURL(image.url, function (pattern) {
       callback(image.name, image.type, pattern);
     });
   }
@@ -318,10 +328,11 @@ function tryReloadLastDimension(element) {
 
 // Set up the button events once the page is loaded.
 window.addEventListener("load", function () {
-  var canvas, height, saveButton, width;
+  var canvas, height, saveButton, selection, width;
 
   // Retrieve the appropriate elements from the page.
   canvas = document.getElementById("preview-canvas");
+  selection = document.getElementById("selection-canvas");
   saveButton = document.getElementById("save-image");
   width = document.getElementById("save-width");
   height = document.getElementById("save-height");
@@ -349,9 +360,21 @@ window.addEventListener("load", function () {
   setupDimensionInput(height);
 
   // Set up the preview image and save button from the given image information.
-  function setupFromImageInfo(name, type, pattern) {
-    // Preview the resulting pattern.
-    previewPattern(canvas, pattern);
+  function setupFromImageInfo(name, type, image) {
+    var context, pattern;
+
+    // Build a pattern from the image.
+    pattern = makePattern(image);
+
+    // Show the selection canvas, if it was hidden.
+    selection.parentNode.style.display = "inline-block";
+
+    // Draw the selection image and preview pattern, both now and when the
+    // window is resized.
+    (window.onresize = function () {
+      drawSelection(selection, image);
+      drawPreview(canvas, pattern);
+    })();
 
     // Enable the save button.
     enableSaveButton(saveButton, function () {
@@ -365,9 +388,10 @@ window.addEventListener("load", function () {
     // Prompt for an image.
     selectImage(function (file) {
       // Load the image as a pattern and store it if possible.
-      loadAndStoreFromFile(file, function (pattern) {
-        // Set up the preview and save button from the image information.
-        setupFromImageInfo(file.name, file.type, pattern);
+      buildAndStoreImageFromFile(file, function (image) {
+        // Set up the selection, preview and save button from the image
+        // information.
+        setupFromImageInfo(file.name, file.type, image);
       });
     });
   };
