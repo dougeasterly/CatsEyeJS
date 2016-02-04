@@ -33,6 +33,10 @@ body, button, input {
   cursor: pointer;
 }
 
+#interface button[disabled] {
+  display: none;
+}
+
 .labelled > label {
   cursor: pointer;
 }
