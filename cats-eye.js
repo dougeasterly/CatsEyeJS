@@ -113,19 +113,21 @@ function clipTriangles(image, context, size) {
 }
 
 // Make a single render on a new canvas from the given image, to be repeated as
-// a pattern.
-function makePattern(image) {
-  var canvas, context, size;
+// a pattern. The size indicates the length of each dimension of the resulting
+// canvas.
+function makePattern(image, size) {
+  var canvas, context;
 
   // Create the canvas to draw the pattern on.
   canvas = document.createElement("canvas");
 
-  // Get the size of the image's smallest dimension.
-  size = Math.min(image.width, image.height);
-
   // Make the canvas a square with edges of length twice the size of the image,
   // given that the image will be drawn twice in both dimensions.
-  canvas.width = canvas.height = size * 2;
+  canvas.width = canvas.height = size;
+
+  // The remaining use of size refers to the size of the image, rather than the
+  // canvas.
+  size = size / 2;
 
   // Grab the context, and move the origin into the middle of the canvas.
   context = canvas.getContext("2d");
@@ -321,7 +323,7 @@ function validateAndStoreDimension(element) {
   }
 
   // Store the value in persistent storage.
-  storeDimension(element.dataset.dimension, element.value);
+  storeDimension(element.id, element.value);
 }
 
 // Trigger a save of the given canvas as an image download with the given name
@@ -369,7 +371,7 @@ function tryReloadLastImage(callback) {
 // Set the initial values of the dimensions if they are in the store.
 function tryReloadLastDimension(element) {
   // Fetch the last dimension value.
-  var value = fetchDimension(element.dataset.dimension);
+  var value = fetchDimension(element.id);
 
   // If the value existed, set the element's value.
   if (!isNaN(value)) {
@@ -379,58 +381,89 @@ function tryReloadLastDimension(element) {
 
 // Set up the button events once the page is loaded.
 window.addEventListener("load", function () {
-  var canvas, height, saveButton, selection, width;
+  var canvas, saveButton, saveHeight, saveWidth,
+      selection, tileReset, tileSize;
 
   // Retrieve the appropriate elements from the page.
   canvas = document.getElementById("preview-canvas");
-  selection = document.getElementById("selection-canvas");
   saveButton = document.getElementById("save-image");
-  width = document.getElementById("save-width");
-  height = document.getElementById("save-height");
+  saveWidth = document.getElementById("save-width");
+  saveHeight = document.getElementById("save-height");
+  selection = document.getElementById("selection-canvas");
+  tileSize = document.getElementById("tile-size");
+  tileReset = document.getElementById("tile-reset");
 
   // Clicking on a label when the values are set by the corresponding attribute
   // in the element can cause the caret to end up on the wrong side of the
   // number. Setting them here reminds the browser that there are already
   // numbers in the boxes.
-  width.value = width.value;
-  height.value = height.value;
+  saveWidth.value = saveWidth.value;
+  saveHeight.value = saveHeight.value;
 
   // Set up a given output dimension input.
   function setupDimensionInput(element) {
-    // Store the values of the dimensions when they change.
-    element.onchange = function () {
+    // Store the values of the dimensions when they change. We use
+    // addEventListener here to ensure this behaviour continues when the
+    // onchange property is set for tileSize.
+    element.addEventListener("change", function () {
       validateAndStoreDimension(element);
-    };
+    });
 
     // Load the last used value for this dimension, if possible.
     tryReloadLastDimension(element);
   }
 
-  // Perform the dimension input setup for both inputs.
-  setupDimensionInput(width);
-  setupDimensionInput(height);
+  // Perform the dimension input setup for all inputs.
+  setupDimensionInput(saveWidth);
+  setupDimensionInput(saveHeight);
+  setupDimensionInput(tileSize);
+
+  // Initialise the tile size to twice the smallest dimension of the
+  // image, and ensure that their values are stored in localStorage.
+  function resetTileSize(image) {
+    tileSize.value = Math.min(image.width, image.height) * 2;
+    validateAndStoreDimension(tileSize);
+  }
 
   // Set up the preview image and save button from the given image information.
   function setupFromImageInfo(name, type, image) {
     var context, pattern;
 
-    // Build a pattern from the image.
-    pattern = makePattern(image);
+    // Update the pattern with the current image and tile dimension values, and
+    // redraw the preview canvas.
+    function updatePattern() {
+      pattern = makePattern(image, parseInt(tileSize.value, 10));
+      drawPreview(canvas, pattern);
+    }
 
-    // Show the selection canvas, if it was hidden.
+    // Create the initial pattern and draw the preview.
+    updatePattern();
+
+    // Draw the selection canvas, and show it if it was hidden.
+    drawSelection(selection, image);
     selection.parentNode.style.display = "inline-block";
 
-    // Draw the selection image and preview pattern, both now and when the
-    // window is resized.
-    (window.onresize = function () {
+    // Draw the selection image and preview pattern when the window is resized.
+    window.onresize = function () {
       drawSelection(selection, image);
       drawPreview(canvas, pattern);
-    })();
+    };
+
+    // Update the pattern when the tile size is changed.
+    tileSize.onchange = updatePattern;
+
+    // Reset the tile size and update the pattern when the reset button is
+    // pressed.
+    tileReset.onclick = function () {
+      resetTileSize(image);
+      updatePattern();
+    };
 
     // Enable the save button.
     enableSaveButton(saveButton, function () {
       // Save the image.
-      saveImage("cats-eye-" + name, type, pattern, width.value, height.value);
+      saveImage("cats-eye-" + name, type, pattern,
+                saveWidth.value, saveHeight.value);
     });
   }
 
@@ -440,6 +473,9 @@ window.addEventListener("load", function () {
     selectImage(function (file) {
       // Load the image as a pattern and store it if possible.
       buildAndStoreImageFromFile(file, function (image) {
+        // Reset the tile size for the new image.
+        resetTileSize(image);
+
         // Set up the selection, preview and save button from the image
         // information.
         setupFromImageInfo(file.name, file.type, image);
@@ -451,30 +487,41 @@ window.addEventListener("load", function () {
   tryReloadLastImage(setupFromImageInfo);
 });
 
-// Set up the save dimension interface.
-window.addEventListener("load", function () {
-  var dimensions, saveGroup, timeout;
+// Set up dimension groups appearing on mouse hover.
+function setupDimensionGroup(group, dimensions) {
+  var timeout;
 
-  // Fetch the groups around the elements.
-  saveGroup = document.getElementById("save-group");
-  dimensions = document.getElementById("save-dimensions");
-
-  // Have the save dimension inputs appear when the group surrounding both is
-  // hovered over.
-  saveGroup.onmouseover = function () {
+  // Have the dimension inputs appear when the group surrounding both is hovered
+  // over.
+  group.onmouseover = function () {
     clearTimeout(timeout);
     dimensions.style.transitionProperty = "none";
     dimensions.style.opacity = 1;
     dimensions.style.display = "inline-block";
   };
 
-  // Have the save dimension inputs disappear over a second, and finally no
-  // longer be displayed.
-  saveGroup.onmouseout = function () {
+  // Have the dimension inputs disappear over a second, and finally no longer be
+  // displayed. The fade functionality is defined in the accompanying CSS.
+  group.onmouseout = function () {
     dimensions.style.transitionProperty = "opacity";
     dimensions.style.opacity = 0;
     timeout = setTimeout(function () {
       dimensions.style.display = "none";
     }, 1000);
   };
+}
+
+// Set up the save dimension interface.
+window.addEventListener("load", function () {
+  var saveDimensions, saveGroup, tileDimensions, tileGroup;
+
+  // Fetch the groups around the elements.
+  saveGroup = document.getElementById("save-group");
+  saveDimensions = document.getElementById("save-dimensions");
+  tileGroup = document.getElementById("tile-group");
+  tileDimensions = document.getElementById("tile-dimensions");
+
+  // Setup the dimension group events.
+  setupDimensionGroup(saveGroup, saveDimensions);
+  setupDimensionGroup(tileGroup, tileDimensions);
 });

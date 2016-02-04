@@ -46,7 +46,7 @@ body, button, input {
   margin: 0px;
 }
 
-#save-dimensions {
+.dimensions {
   display: none;
   transition-duration: 1s;
   transition-timing-function: ease-in;
@@ -57,7 +57,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
   margin: 0px;
 }
 
-.save-dimension {
+.dimension {
   width: 40px;
 }
 

@@ -13,22 +13,33 @@
         <button id="load-image">Load Image</button>
         <div id="save-group" class="group">
           <button id="save-image" disabled>Save Image</button>
-          <div id="save-dimensions" class="group">
+          <div id="save-dimensions" class="group dimensions">
             <div class="labelled">
               <label for="save-width">Width</label>
-              <input id="save-width" class="save-dimension" data-dimension="width"
-                    type="number" min="1" value="1000">
+              <input id="save-width" class="dimension"
+                     type="number" min="1" value="1000">
             </div>
             <div class="labelled">
               <label for="save-height">Height</label>
-              <input id="save-height" class="save-dimension" data-dimension="height"
-                    type="number" min="1" value="1000">
+              <input id="save-height" class="dimension"
+                     type="number" min="1" value="1000">
             </div>
           </div>
         </div>
       </div>
-      <div id="image-selection">
-        <canvas id="selection-canvas"></canvas>
+      <div id="tile-group" class="group">
+        <div id="group">
+          <div id="image-selection">
+            <canvas id="selection-canvas"></canvas>
+          </div>
+        </div>
+        <div id="tile-dimensions" class="group dimensions">
+          <div class="labelled">
+            <label for="tile-size">Size</label>
+            <input id="tile-size" class="dimension" type="number" min="1">
+          </div>
+          <button id="tile-reset">Reset</button>
+        </div>
       </div>
     </section>
     <section id="preview">
