@@ -1,0 +1,61 @@
+html, body, #preview {
+  width: 100%;
+  height: 100%;
+  margin: 0px;
+  overflow: hidden;
+}
+
+body, button, input {
+  font-size: 10pt;
+  font-family: "Trebuchet MS", Helvetica, sans-serif;
+}
+
+#interface {
+  position: fixed;
+  padding: 20px;
+}
+
+.group {
+  display: inline-block;
+}
+
+#interface button, .labelled {
+  display: inline-block;
+  padding: 2px 6px;
+  color: white;
+  background-color: rgba(0, 0, 0, 0.7);
+  border: 0px;
+  border-radius: 2px;
+}
+
+#interface button, .labelled > label {
+  cursor: pointer;
+}
+
+.labelled > label {
+  cursor: pointer;
+}
+
+.labelled > input {
+  color: white;
+  border: 0px;
+  text-align: right;
+  background: none;
+  padding: 0px;
+  margin: 0px;
+}
+
+#save-dimensions {
+  display: none;
+  transition-duration: 1s;
+  transition-timing-function: ease-in;
+}
+
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0px;
+}
+
+.save-dimension {
+  width: 40px;
+}

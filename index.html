@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Cats Eye</title>
+    <link rel="stylesheet" href="cats-eye.css">
+    <script src="cats-eye.js"></script>
+  </head>
+  <body>
+    <section id="interface">
+      <div id="image-inputs">
+        <button id="load-image">Load Image</button>
+        <div id="save-group" class="group">
+          <button id="save-image" disabled>Save Image</button>
+          <div id="save-dimensions" class="group">
+            <div class="labelled">
+              <label for="save-width">Width</label>
+              <input id="save-width" class="save-dimension" data-dimension="width"
+                    type="number" min="1" value="1000">
+            </div>
+            <div class="labelled">
+              <label for="save-height">Height</label>
+              <input id="save-height" class="save-dimension" data-dimension="height"
+                    type="number" min="1" value="1000">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section id="preview">
+      <canvas id="preview-canvas"></canvas>
+    </section>
+  </body>
+</html>
