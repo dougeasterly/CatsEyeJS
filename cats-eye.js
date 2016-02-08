@@ -1,196 +1,357 @@
 "use strict";
 
+// Construct a fresh prototype from the given constructor without invoking the
+// constructor itself.
+function Inherit(Super) {
+  var Clone = function () {};
+  Clone.prototype = Super.prototype;
+  return new Clone();
+}
+
+
+// A point in two-dimensional space.
+function Point(x, y) {
+  this.x = x;
+  this.y = y;
+}
+
+// Construct a new point by scaling this point's values.
+Point.prototype.scaled = function (scale) {
+  return new Point(this.x * scale, this.y * scale);
+};
+
+
+// A triangle represented by three points.
+function Triangle(a, b, c) {
+  this[0] = a;
+  this[1] = b;
+  this[2] = c;
+};
+
+// Construct a new triangle by sclaing this triangle's points.
+Triangle.prototype.scaled = function (scale) {
+  return new Triangle(this[0].scaled(scale),
+                      this[1].scaled(scale),
+                      this[2].scaled(scale));
+};
+
+// Construct a new triangle by making the larger straight side the same length
+// as the smaller side.
+Triangle.prototype.squared = function () {
+  var size = Math.min(this[2].x, this[2].y);
+
+  return new Triangle(new Point(0, 0),
+                      new Point(size, 0),
+                      new Point(size, size));
+};
+
+
+// The abstract class of objects which have a canvas to draw a triangle path on.
+function TrianglePathing(context) {
+  this.context = context;
+}
+
 // Create a triangle path on the given context of the given size.
 //
-// Note that we have to overcompensate on the edges of the hypotenuse,
+// Note that we should be overcompensating on the edges of the hypotenuse,
 // otherwise the rendering in some browsers can leave a layout pixel blank
 // between the eventual rotations.
-function pathTriangle(context, width, height) {
-  context.beginPath();
-  context.moveTo(-0.5, 0);
-  context.lineTo(width, 0);
-  context.lineTo(width, height + 0.5);
-  context.lineTo(-0.5, 0);
-  context.closePath();
+TrianglePathing.prototype.pathTriangle = function (triangle) {
+  this.context.beginPath();
+  this.context.moveTo(triangle[0].x, triangle[0].y);
+  this.context.lineTo(triangle[1].x, triangle[1].y);
+  this.context.lineTo(triangle[2].x, triangle[2].y);
+  this.context.lineTo(triangle[0].x, triangle[0].y);
+  this.context.closePath();
+};
+
+
+// A box for selecting a portion of an image to cats-eye.
+function Selection(canvas) {
+  TrianglePathing.call(this, canvas.getContext("2d"));
+
+  this.canvas = canvas;
+
+  this.image = null;
+  this.triangle = null;
 }
 
-// Draw a circle on the given context at a position and with a radius. Set the
-// fill-style beforehand to modify how the circle is drawn.
-function drawCircle(context, x, y, radius) {
-  context.beginPath();
-  context.arc(x, y, radius, 0, 2 * Math.PI);
-  context.closePath();
-  context.fill();
-}
+Selection.prototype = Inherit(TrianglePathing);
 
-// Resize the given canvas to the aspect ratio of the given image, and draw the
-// image on it.
-function drawSelection(canvas, image) {
-  var context, height, html, radius, width;
+// A fixed size for the radius of each selector point.
+Selection.pointRadius = 7;
 
-  // Fetch the context and prepare to render to it without modifying the state
-  // once the function ends.
-  context = canvas.getContext("2d");
-  context.save();
+// Set the image and reset the selection points.
+Selection.prototype.setImage = function (image) {
+  var size = Math.min(image.width, image.height);
 
-  // Define the radius of the selection triangle corner circles.
-  radius = 7;
+  // Save the image and reset the triangle to the dimensions of the image.
+  this.image = image;
+  this.triangle = new Triangle(new Point(0, 0),
+                               new Point(image.width, 0),
+                               new Point(image.width, image.height));
 
-  // Fetch the size of the original image.
-  width = image.width;
-  height = image.height;
+  // Redraw the selection.
+  this.draw();
+};
+
+// Work out an appropriate scale for the selector based on the ratio of the
+// image size to the size of the document.
+Selection.prototype.calculateScale = function () {
+  var html, scale;
 
   // Fetch the document element so we can examine its size in comparison to the
   // image, to ensure the selection preview doesn't take up too much space.
   html = document.documentElement;
 
+  // Start with a scale of 1:1.
+  scale = 1;
+
   // If the width of the image exceeds a quarter of the display, shrink the
   // width to that quarter and the height to match.
-  if (width > html.offsetWidth / 4) {
-    width = html.offsetWidth / 4;
-    height = image.height * (width / image.width);
+  if (this.image.width > html.offsetWidth / 4) {
+    scale = html.offsetWidth / 4 / this.image.width;
   }
 
   // Whether or not the height has been shrunk, if the height of the image still
   // exceeds a quarter of the display, shrink the height to that quarter and the
   // width to match. As this process can only make the width smaller, it does
   // not invalidate the shrinking above.
-  if (height > html.offsetHeight / 4) {
-    height = html.offsetHeight / 4;
-    width = image.width * (height / image.height);
+  if (this.image.height * scale > html.offsetHeight / 4) {
+    scale = html.offsetHeight / 4 / this.image.height;
   }
+
+  return scale;
+};
+
+// Draw a circle on the given context at a position and with a radius.
+//
+// Set the fill-style beforehand to modify how the circle is drawn.
+Selection.prototype.drawCircle = function (point, radius) {
+  var context = this.canvas.getContext("2d");
+
+  context.beginPath();
+  context.arc(point.x, point.y, radius, 0, 2 * Math.PI);
+  context.closePath();
+  context.fill();
+};
+
+// Draw the selection on its canvas by rendering its image and then the triangle
+// selector at its current points. The selector will scale to ensure it does not
+// take up too much of the document.
+Selection.prototype.draw = function () {
+  var context, height, scale, triangle, width;
+
+  // Fetch the context and prepare to render to it without modifying the state
+  // once the function ends.
+  context = this.canvas.getContext("2d");
+  context.save();
+
+  // Fetch the size of the original image, and scale it based on the size of the
+  // document.
+  scale = this.calculateScale();
+  width = this.image.width * scale;
+  height = this.image.height * scale;
+
+  // Fetch and scale the points of the triangle selector.
+  triangle = this.triangle.scaled(scale);
 
   // Resize the canvas to the size of the image, leaving room for the radius of
   // each triangle corner.
-  canvas.width = width + radius * 2 + 2;
-  canvas.height = height + radius * 2 + 2;
+  this.canvas.width = width + Selection.pointRadius * 2 + 2;
+  this.canvas.height = height + Selection.pointRadius * 2 + 2;
 
   // Move the origin to take the extra radius room into account.
-  context.translate(radius + 1, radius + 1);
+  context.translate(Selection.pointRadius + 1, Selection.pointRadius + 1);
 
   // Draw the image on the canvas.
-  context.drawImage(image, 0, 0, width, height);
+  context.drawImage(this.image, 0, 0, width, height);
 
   // Draw the selection triangle over the top of the image.
   context.strokeStyle = "black";
   context.lineWidth = 2;
-  pathTriangle(context, width, height);
+  this.pathTriangle(triangle);
   context.stroke();
 
   // Draw large circles on the each of the corners of the triangle.
   context.fillStyle = "red";
-  drawCircle(context, -0.5, 0, radius);
-  drawCircle(context, width, 0, radius);
-  drawCircle(context, width, height + 0.5, radius);
+  this.drawCircle(triangle[0], Selection.pointRadius);
+  this.drawCircle(triangle[1], Selection.pointRadius);
+  this.drawCircle(triangle[2], Selection.pointRadius);
 
   // Restore the context state before exiting.
   context.restore();
+
+  // Show the canvas if it was hidden.
+  this.canvas.parentNode.style.display = "block";
+};
+
+
+// An object to draw a cats-eye pattern.
+function CatsEye(image, size) {
+  this.canvas = document.createElement("canvas");
+
+  TrianglePathing.call(this, this.canvas.getContext("2d"));
+
+  this.image = image;
+  this.size = size;
 }
+
+CatsEye.prototype = Inherit(TrianglePathing);
+
+// Set the size of the cats-eye effect to the given size.
+CatsEye.prototype.setSize = function (size) {
+  this.size = size;
+};
 
 // Draw a triangle clipping of the image.
-function clipTriangle(image, context, size) {
+CatsEye.prototype.clipTriangle = function (triangle) {
+  var context = this.canvas.getContext("2d");
+
   context.save();
-  pathTriangle(context, size, size);
+  this.pathTriangle(triangle);
   context.clip();
-  context.drawImage(image, 0, 0, size, size);
+  context.drawImage(this.image, 0, 0, this.size, this.size);
   context.restore();
-}
+};
 
 // Draw multiple triangles of the given image to make the full pattern.
-function clipTriangles(image, context, size) {
-  var i, j;
+CatsEye.prototype.clipTriangles = function (triangle) {
+  var context, i, j;
+
+  context = this.canvas.getContext("2d");
 
   for (i = 0; i < 4; i += 1) {
     for (j = 0; j < 2; j += 1) {
       // Draw a triangle and its reflection.
       context.scale(1, -1);
-      clipTriangle(image, context, size);
+      this.clipTriangle(triangle);
     }
 
     // Draw the inner loop at each of 4 rotation points around the origin.
     context.rotate(Math.PI / 2);
   }
-}
+};
 
 // Make a single render on a new canvas from the given image, to be repeated as
 // a pattern. The size indicates the length of each dimension of the resulting
 // canvas.
-function makePattern(image, size) {
-  var canvas, context;
-
-  // Create the canvas to draw the pattern on.
-  canvas = document.createElement("canvas");
-
+CatsEye.prototype.makePattern = function (triangle) {
   // Make the canvas a square with edges of length twice the size of the image,
   // given that the image will be drawn twice in both dimensions.
-  canvas.width = canvas.height = size;
+  this.canvas.width = this.canvas.height = this.size * 2;
 
-  // The remaining use of size refers to the size of the image, rather than the
-  // canvas.
-  size = size / 2;
+  // Move the origin into the middle of the canvas.
+  this.canvas.getContext("2d").translate(this.size, this.size);
 
-  // Grab the context, and move the origin into the middle of the canvas.
-  context = canvas.getContext("2d");
-  context.translate(size, size);
+  // Draw the pattern and return the canvas.
+  this.clipTriangles(triangle);
+  return this.canvas;
+};
 
-  // Draw the pattern.
-  clipTriangles(image, context, size);
 
-  return canvas;
+// The abstract super class of objects with a canvas to draw a pattern on.
+function PatternDraw(canvas) {
+  this.canvas = canvas;
+  this.pattern = null;
 }
 
 // Draw the pattern onto the given canvas.
-function drawPattern(canvas, pattern) {
-  var context, height, repeated, width;
+PatternDraw.prototype.drawPattern = function () {
+  var context, height, pattern, width;
 
   // Grab the context of the canvas, and repeat the pattern in the context.
-  context = canvas.getContext("2d");
-  repeated = context.createPattern(pattern, "repeat");
+  context = this.canvas.getContext("2d");
+  pattern = context.createPattern(this.pattern, "repeat");
 
   // Fetch the width and height of the canvas.
-  width = canvas.width;
-  height = canvas.height;
+  width = this.canvas.width;
+  height = this.canvas.height;
 
   // Move the origin to the center of the canvas, and then draw a rectangle from
   // back at the top left corner to the size of the large canvas. Fill the
   // rectangle with the repeating pattern of the smaller canvas.
   context.translate(width / 2, height / 2);
   context.rect(-width / 2, -height / 2, width, height);
-  context.fillStyle = repeated;
+  context.fillStyle = pattern;
   context.fill();
+};
+
+
+// An object which creates a temporary canvas to render the given pattern on and
+// return the render as a data URL.
+function PatternSaver(name, type) {
+  PatternDraw.call(this, document.createElement("canvas"));
+
+  this.name = name;
+  this.type = type;
+  this.pattern = null;
 }
 
-// Draw the pattern onto the given canvas, resizing it to fill its container.
-function drawPreview(canvas, pattern) {
+PatternSaver.prototype = Inherit(PatternDraw);
+
+// Set the properties of the save: download name, image type, and the pattern
+// itself.
+PatternSaver.prototype.setPattern = function (pattern) {
+  this.pattern = pattern;
+};
+
+// Render an image of this object's pattern with the given dimensions.
+PatternSaver.prototype.renderToDataURL = function (width, height) {
+  // Resize the canvas to the given width and height.
+  this.canvas.width = width;
+  this.canvas.height = height;
+
+  // Draw on the canvas, then construct the corresponding data URL.
+  this.drawPattern();
+  return this.canvas.toDataURL(this.type);
+};
+
+// Perform the save of this object's pattern, rendered to an image of the given
+// dimensions.
+PatternSaver.prototype.save = function (width, height) {
+  // Construct a link to simulate a click on.
+  var link = document.createElement("a");
+
+  // Set the properties of the link from the given information, and dispatch a
+  // click to the link to trigger the download.
+  link.download = "cats-eye-" + this.name;
+  link.href = this.renderToDataURL(width, height);
+  link.dispatchEvent(new MouseEvent("click"));
+};
+
+
+// A preview of the current cats-eye render.
+function PatternPreview(canvas) {
+  PatternDraw.call(this, canvas, null);
+};
+
+PatternPreview.prototype = Inherit(PatternDraw);
+
+// Set the pattern for this object, and redraw the preview.
+PatternPreview.prototype.setPattern = function (pattern) {
+  this.pattern = pattern;
+  this.draw();
+};
+
+// Draw the preview render, resizing the canvas to fill its container.
+PatternPreview.prototype.draw = function () {
   // Fetch the container of the canvas.
-  var container = canvas.parentNode;
+  var container = this.canvas.parentNode;
 
   // Set the size of the canvas to 0, to allow the container to return to its
   // natural size.
-  canvas.width = 0;
-  canvas.height = 0;
+  this.canvas.width = 0;
+  this.canvas.height = 0;
 
   // Set the size of the preview canvas to the size of the container.
-  canvas.width = container.offsetWidth;
-  canvas.height = container.offsetHeight;
+  this.canvas.width = container.offsetWidth;
+  this.canvas.height = container.offsetHeight;
 
   // Draw the pattern on the preview canvas.
-  drawPattern(canvas, pattern);
-}
+  this.drawPattern();
+};
 
-// Draw the pattern on a new canvas of the given width and height for output,
-// and return the resulting canvas.
-function drawOutput(pattern, width, height) {
-  // Construct a canvas with the given width and height.
-  var canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  // Draw the pattern on the new canvas.
-  drawPattern(canvas, pattern);
-
-  return canvas;
-}
 
 // Prompt the user to select an image, calling the given function if the user
 // makes a choice.
@@ -326,35 +487,6 @@ function validateAndStoreDimension(element) {
   storeDimension(element.id, element.value);
 }
 
-// Trigger a save of the given canvas as an image download with the given name
-// and media type.
-function saveCanvas(name, type, canvas) {
-  // Construct a link to simulate a click on.
-  var link = document.createElement("a");
-
-  // Calculate the name and type of the output file from the input, and
-  // trigger the save.
-  link.download = name;
-  link.href = canvas.toDataURL(type);
-  link.dispatchEvent(new MouseEvent("click"));
-}
-
-// Render and download the currently loaded pattern.
-function saveImage(name, type, pattern, width, height) {
-  var canvas;
-
-  // Draw and save the output.
-  canvas = drawOutput(pattern, width, height);
-  saveCanvas(name, type, canvas);
-}
-
-// Enable the save button and hook up its click event to the given callback.
-function enableSaveButton(saveButton, callback) {
-  // Enable the save button, and trigger a save when it is clicked.
-  saveButton.disabled = false;
-  saveButton.onclick = callback;
-}
-
 // Try and load the last image as a pattern, if such an image exists, passing
 // the image's name, type, and loaded pattern to the given callback.
 function tryReloadLastImage(callback) {
@@ -379,17 +511,25 @@ function tryReloadLastDimension(element) {
   }
 }
 
+
 // Set up the button events once the page is loaded.
 window.addEventListener("load", function () {
-  var canvas, saveButton, saveHeight, saveWidth,
+  var preview, saveButton, saveHeight, saveWidth, saver,
       selection, tileReset, tileSize;
 
-  // Retrieve the appropriate elements from the page.
-  canvas = document.getElementById("preview-canvas");
+  // Set up the preview and selection objects.
+  preview = new PatternPreview(document.getElementById("preview-canvas"));
+  selection = new Selection(document.getElementById("selection-canvas"));
+
+  // The saving object is set up when an image is loaded.
+  saver = null;
+
+  // Grab the save interface.
   saveButton = document.getElementById("save-image");
   saveWidth = document.getElementById("save-width");
   saveHeight = document.getElementById("save-height");
-  selection = document.getElementById("selection-canvas");
+
+  // Grab the tile interface.
   tileSize = document.getElementById("tile-size");
   tileReset = document.getElementById("tile-reset");
 
@@ -427,45 +567,54 @@ window.addEventListener("load", function () {
 
   // Set up the preview image and save button from the given image information.
   function setupFromImageInfo(name, type, image) {
-    var context, pattern;
+    // Create a new cats-eye creator for the new image.
+    var catsEye = new CatsEye(image, parseInt(tileSize.value, 10) / 2);
+
+    // Build a new pattern saver from the image information.
+    saver = new PatternSaver(name, type);
+
+    // Update the selection canvas with the new image.
+    selection.setImage(image);
 
     // Update the pattern with the current image and tile dimension values, and
     // redraw the preview canvas.
     function updatePattern() {
-      pattern = makePattern(image, parseInt(tileSize.value, 10));
-      drawPreview(canvas, pattern);
+      var pattern = catsEye.makePattern(selection.triangle.squared());
+
+      saver.setPattern(pattern);
+      preview.setPattern(pattern);
     }
 
     // Create the initial pattern and draw the preview.
     updatePattern();
 
-    // Draw the selection canvas, and show it if it was hidden.
-    drawSelection(selection, image);
-    selection.parentNode.style.display = "inline-block";
-
     // Draw the selection image and preview pattern when the window is resized.
     window.onresize = function () {
-      drawSelection(selection, image);
-      drawPreview(canvas, pattern);
+      selection.draw();
+      preview.draw();
     };
 
     // Update the pattern when the tile size is changed.
-    tileSize.onchange = updatePattern;
+    tileSize.onchange = function () {
+      catsEye.setSize(tileSize.value / 2);
+      updatePattern();
+    };
 
     // Reset the tile size and update the pattern when the reset button is
     // pressed.
     tileReset.onclick = function () {
       resetTileSize(image);
-      updatePattern();
+      tileSize.onchange();
     };
 
     // Enable the save button.
-    enableSaveButton(saveButton, function () {
-      // Save the image.
-      saveImage("cats-eye-" + name, type, pattern,
-                saveWidth.value, saveHeight.value);
-    });
+    saveButton.disabled = false;
   }
+
+  // Save the current render when the save button is clicked.
+  saveButton.onclick = function () {
+    saver.save(saveWidth.value, saveHeight.value);
+  };
 
   // Select and load an image when the load image button is clicked.
   document.getElementById("load-image").onclick = function () {
