@@ -35,14 +35,25 @@ Triangle.prototype.scaled = function (scale) {
                       this[2].scaled(scale));
 };
 
+// Calculate the width of the triangle, assuming the first point is on the left.
+Triangle.prototype.width = function () {
+  return this[1].x - this[0].x;
+};
+
+// Calculate the height of the triangle, assuming the second point is on the
+// top.
+Triangle.prototype.height = function () {
+  return this[2].y - this[1].y;
+};
+
 // Construct a new triangle by making the larger straight side the same length
 // as the smaller side.
 Triangle.prototype.squared = function () {
-  var size = Math.min(this[2].x, this[2].y);
+  var size = Math.min(this.width(), this.height());
 
-  return new Triangle(new Point(0, 0),
-                      new Point(size, 0),
-                      new Point(size, size));
+  return new Triangle(new Point(this[0].x, this[0].y),
+                      new Point(this[0].x + size, this[0].y),
+                      new Point(this[0].x + size, this[0].y + size));
 };
 
 
@@ -188,30 +199,56 @@ Selection.prototype.draw = function () {
 
 
 // An object to draw a cats-eye pattern.
-function CatsEye(image, size) {
+function CatsEye(image, scale) {
   this.canvas = document.createElement("canvas");
 
   TrianglePathing.call(this, this.canvas.getContext("2d"));
 
   this.image = image;
-  this.size = size;
+  this.scale = scale;
 }
 
 CatsEye.prototype = Inherit(TrianglePathing);
 
 // Set the size of the cats-eye effect to the given size.
-CatsEye.prototype.setSize = function (size) {
-  this.size = size;
+CatsEye.prototype.setScale = function (scale) {
+  this.scale = scale;
 };
 
 // Draw a triangle clipping of the image.
 CatsEye.prototype.clipTriangle = function (triangle) {
-  var context = this.canvas.getContext("2d");
+  var context, height, width, x, y;
 
+  context = this.canvas.getContext("2d");
+
+  // Scale the left point of the triangle.
+  x = this.scale * triangle[0].x;
+  y = this.scale * triangle[0].y;
+
+  // Scale the dimensions of the triangle.
+  width = this.scale * triangle.width();
+  height = this.scale * triangle.height();
+
+  // Save the context to ensure the clip does not apply in the future.
   context.save();
-  this.pathTriangle(triangle);
+
+  // Path a triangle directly over the canvas: the canvas has already been sized
+  // to the dimensions of the triangle, so the triangle we clip is directly over
+  // the canvas.
+  this.pathTriangle(new Triangle(new Point(0, 0),
+                                 new Point(width, 0),
+                                 new Point(width, height)));
+
+  // Clip the following image draw to that triangle path.
   context.clip();
-  context.drawImage(this.image, 0, 0, this.size, this.size);
+
+  // Draw the image, moved back to before the start of the canvas for the area
+  // that needs to be clipped as a rectangle.
+  context.drawImage(this.image, -x, -y,
+                    this.scale * triangle.width() + x,
+                    this.scale * triangle.height() + y);
+
+  // Restore the context before finishing.
   context.restore();
 };
 
@@ -237,12 +274,16 @@ CatsEye.prototype.clipTriangles = function (triangle) {
 // a pattern. The size indicates the length of each dimension of the resulting
 // canvas.
 CatsEye.prototype.makePattern = function (triangle) {
-  // Make the canvas a square with edges of length twice the size of the image,
-  // given that the image will be drawn twice in both dimensions.
-  this.canvas.width = this.canvas.height = this.size * 2;
+  // Make the canvas with edges of length twice the size of the triangle, given
+  // that the image will be drawn twice in both dimensions, then scaled to the
+  // tile scale value. These values are maxed out at 1 to ensure the canvas is
+  // large enough to draw on.
+  this.canvas.width = Math.max(1, triangle.width() * 2 * this.scale);
+  this.canvas.height = Math.max(1, triangle.height() * 2 * this.scale);
 
   // Move the origin into the middle of the canvas.
-  this.canvas.getContext("2d").translate(this.size, this.size);
+  this.canvas.getContext("2d").translate(this.canvas.width / 2,
+                                         this.canvas.height / 2);
 
   // Draw the pattern and return the canvas.
   this.clipTriangles(triangle);
@@ -514,14 +555,15 @@ function tryReloadLastDimension(element) {
 
 // Set up the button events once the page is loaded.
 window.addEventListener("load", function () {
-  var preview, saveButton, saveHeight, saveWidth, saver,
-      selection, tileReset, tileSize;
+  var catsEye, patternUpdate, preview, saveButton, saveHeight, saveWidth, saver,
+      selection, tileReset, tileScale;
 
   // Set up the preview and selection objects.
   preview = new PatternPreview(document.getElementById("preview-canvas"));
   selection = new Selection(document.getElementById("selection-canvas"));
 
-  // The saving object is set up when an image is loaded.
+  // The cats-eye and saving object is set up when an image is loaded.
+  catsEye = null;
   saver = null;
 
   // Grab the save interface.
@@ -530,7 +572,7 @@ window.addEventListener("load", function () {
   saveHeight = document.getElementById("save-height");
 
   // Grab the tile interface.
-  tileSize = document.getElementById("tile-size");
+  tileScale = document.getElementById("tile-scale");
   tileReset = document.getElementById("tile-reset");
 
   // Clicking on a label when the values are set by the corresponding attribute
@@ -544,7 +586,7 @@ window.addEventListener("load", function () {
   function setupDimensionInput(element) {
     // Store the values of the dimensions when they change. We use
     // addEventListener here to ensure this behaviour continues when the
-    // onchange property is set for tileSize.
+    // onchange property is set for tileScale.
     element.addEventListener("change", function () {
       validateAndStoreDimension(element);
     });
@@ -556,34 +598,34 @@ window.addEventListener("load", function () {
   // Perform the dimension input setup for all inputs.
   setupDimensionInput(saveWidth);
   setupDimensionInput(saveHeight);
-  setupDimensionInput(tileSize);
+  setupDimensionInput(tileScale);
 
   // Initialise the tile size to twice the smallest dimension of the
   // image, and ensure that their values are stored in localStorage.
   function resetTileSize(image) {
-    tileSize.value = Math.min(image.width, image.height) * 2;
-    validateAndStoreDimension(tileSize);
+    tileScale.value = 100;
+    validateAndStoreDimension(tileScale);
+  }
+
+  // Update the pattern with the current image and tile dimension values, and
+  // redraw the preview canvas.
+  function updatePattern() {
+    var pattern = catsEye.makePattern(selection.triangle.squared());
+
+    saver.setPattern(pattern);
+    preview.setPattern(pattern);
   }
 
   // Set up the preview image and save button from the given image information.
   function setupFromImageInfo(name, type, image) {
     // Create a new cats-eye creator for the new image.
-    var catsEye = new CatsEye(image, parseInt(tileSize.value, 10) / 2);
+    catsEye = new CatsEye(image, parseInt(tileScale.value, 10) / 100);
 
     // Build a new pattern saver from the image information.
     saver = new PatternSaver(name, type);
 
     // Update the selection canvas with the new image.
     selection.setImage(image);
-
-    // Update the pattern with the current image and tile dimension values, and
-    // redraw the preview canvas.
-    function updatePattern() {
-      var pattern = catsEye.makePattern(selection.triangle.squared());
-
-      saver.setPattern(pattern);
-      preview.setPattern(pattern);
-    }
 
     // Create the initial pattern and draw the preview.
     updatePattern();
@@ -595,8 +637,8 @@ window.addEventListener("load", function () {
     };
 
     // Update the pattern when the tile size is changed.
-    tileSize.onchange = function () {
-      catsEye.setSize(tileSize.value / 2);
+    tileScale.onchange = function () {
+      catsEye.setScale(tileScale.value / 100);
       updatePattern();
     };
 
@@ -604,7 +646,7 @@ window.addEventListener("load", function () {
     // pressed.
     tileReset.onclick = function () {
       resetTileSize(image);
-      tileSize.onchange();
+      tileScale.onchange();
     };
 
     // Enable the save button.
@@ -631,6 +673,28 @@ window.addEventListener("load", function () {
       });
     });
   };
+
+  window.addEventListener("mousemove", function (event) {
+    var scale, x, y;
+
+    if (selection.triangle !== null && selection.image !== null) {
+      x = event.pageX - selection.canvas.offsetLeft - Selection.pointRadius;
+      y = event.pageY - selection.canvas.offsetTop - Selection.pointRadius;
+
+      scale = selection.calculateScale();
+
+      x = Math.min(Math.max(0, x / scale), selection.image.width);
+      // y = Math.min(Math.max(0, y / scale), selection.image.height);
+
+      selection.triangle[0] = new Point(x, selection.triangle[0].y);
+      selection.draw();
+
+      // Update the pattern in 20ms, but if a move is made within that time
+      // cancel the update and let the next move redraw.
+      clearTimeout(patternUpdate);
+      patternUpdate = setTimeout(updatePattern, 20);
+    }
+  });
 
   // Load the last used image, if possible.
   tryReloadLastImage(setupFromImageInfo);
