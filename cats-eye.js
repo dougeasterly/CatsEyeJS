@@ -3,7 +3,10 @@
 // Construct a fresh prototype from the given constructor without invoking the
 // constructor itself.
 function Inherit(Super) {
-  var Clone = function () {};
+  function Clone() {
+    this.constructor = Super;
+  }
+
   Clone.prototype = Super.prototype;
   return new Clone();
 }
