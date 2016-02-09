@@ -29,7 +29,7 @@ body, button, input {
   border-radius: 2px;
 }
 
-#interface button, .labelled > label {
+#interface button {
   cursor: pointer;
 }
 
@@ -38,7 +38,7 @@ body, button, input {
 }
 
 .labelled > label {
-  cursor: pointer;
+  cursor: text;
 }
 
 .labelled > input {
