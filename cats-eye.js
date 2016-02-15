@@ -18,17 +18,34 @@ function Point(x, y) {
   this.y = y;
 }
 
+Point.fromJSON = function (object) {
+  return new Point(object.x, object.y);
+};
+
 // Construct a new point by scaling this point's values.
 Point.prototype.scaled = function (scale) {
   return new Point(this.x * scale, this.y * scale);
 };
 
+// Calculate whether the given point is within the given radius from this point.
+Point.prototype.isWithin = function (point, radius) {
+  return Math.sqrt(Math.pow(Math.abs(this.x - point.x), 2) +
+                   Math.pow(Math.abs(this.y - point.y), 2)) <= radius;
+};
 
-// A triangle represented by three points.
+
+// A right-angled triangle represented by three points, the second of which
+// should be opposite the hypotenuse.
 function Triangle(a, b, c) {
   this[0] = a;
   this[1] = b;
   this[2] = c;
+};
+
+Triangle.fromJSON = function (object) {
+  return new Triangle(Point.fromJSON(object[0]),
+                      Point.fromJSON(object[1]),
+                      Point.fromJSON(object[2]));
 };
 
 // Construct a new triangle by sclaing this triangle's points.
@@ -38,15 +55,14 @@ Triangle.prototype.scaled = function (scale) {
                       this[2].scaled(scale));
 };
 
-// Calculate the width of the triangle, assuming the first point is on the left.
+// Calculate the width of the triangle.
 Triangle.prototype.width = function () {
-  return this[1].x - this[0].x;
+  return Math.abs(this[1].x - this[0].x);
 };
 
-// Calculate the height of the triangle, assuming the second point is on the
-// top.
+// Calculate the height of the triangle.
 Triangle.prototype.height = function () {
-  return this[2].y - this[1].y;
+  return Math.abs(this[2].y - this[1].y);
 };
 
 // Construct a new triangle by making the larger straight side the same length
@@ -57,6 +73,31 @@ Triangle.prototype.squared = function () {
   return new Triangle(new Point(this[0].x, this[0].y),
                       new Point(this[0].x + size, this[0].y),
                       new Point(this[0].x + size, this[0].y + size));
+};
+
+// Fetch the point with the minimum of the given dimension.
+Triangle.prototype.mostPoint = function (dimension) {
+  var i, point;
+
+  point = this[0];
+
+  for (i = 1; i < 3; i += 1) {
+    if (this[i][dimension] < point[dimension]) {
+      point = this[i];
+    }
+  }
+
+  return point;
+};
+
+// Fetch the leftmost point of the triangle.
+Triangle.prototype.leftmostPoint = function () {
+  return this.mostPoint("x");
+};
+
+// Fetch the topmost point of the triangle.
+Triangle.prototype.topmostPoint = function () {
+  return this.mostPoint("y");
 };
 
 
@@ -95,15 +136,15 @@ Selection.prototype = Inherit(TrianglePathing);
 // A fixed size for the radius of each selector point.
 Selection.pointRadius = 7;
 
-// Set the image and reset the selection points.
-Selection.prototype.setImage = function (image) {
-  var size = Math.min(image.width, image.height);
-
+// Set the image and reset the selection points, optionally with a starting
+// triangle selection.
+Selection.prototype.setImage = function (image, triangle) {
   // Save the image and reset the triangle to the dimensions of the image.
   this.image = image;
-  this.triangle = new Triangle(new Point(0, 0),
-                               new Point(image.width, 0),
-                               new Point(image.width, image.height));
+  this.triangle = triangle ||
+    new Triangle(new Point(0, 0),
+                 new Point(image.width, 0),
+                 new Point(image.width, image.height));
 
   // Redraw the selection.
   this.draw();
@@ -218,22 +259,15 @@ CatsEye.prototype.setScale = function (scale) {
   this.scale = scale;
 };
 
-// Draw a triangle clipping of the image.
+// Clip the given triangle on the current canvas.
 CatsEye.prototype.clipTriangle = function (triangle) {
-  var context, height, width, x, y;
+  var context, height, width;
 
   context = this.canvas.getContext("2d");
 
-  // Scale the left point of the triangle.
-  x = this.scale * triangle[0].x;
-  y = this.scale * triangle[0].y;
-
-  // Scale the dimensions of the triangle.
-  width = this.scale * triangle.width();
-  height = this.scale * triangle.height();
-
-  // Save the context to ensure the clip does not apply in the future.
-  context.save();
+  // Fetch the dimensions of the triangle.
+  width = triangle.width();
+  height = triangle.height();
 
   // Path a triangle directly over the canvas: the canvas has already been sized
   // to the dimensions of the triangle, so the triangle we clip is directly over
@@ -244,28 +278,61 @@ CatsEye.prototype.clipTriangle = function (triangle) {
 
   // Clip the following image draw to that triangle path.
   context.clip();
-
-  // Draw the image, moved back to before the start of the canvas for the area
-  // that needs to be clipped as a rectangle.
-  context.drawImage(this.image, -x, -y,
-                    this.scale * triangle.width() + x,
-                    this.scale * triangle.height() + y);
-
-  // Restore the context before finishing.
-  context.restore();
 };
 
-// Draw multiple triangles of the given image to make the full pattern.
-CatsEye.prototype.clipTriangles = function (triangle) {
-  var context, i, j;
+CatsEye.prototype.drawImage = function (triangle) {
+  var context, imageHeight, imageWidth, scaleHorizontal, scaleVertical,
+      size, triangleHeight, triangleWidth, x, y;
 
   context = this.canvas.getContext("2d");
 
+  // Fetch the scaled dimensions of the triangle.
+  triangleWidth = triangle.width();
+  triangleHeight = triangle.height();
+
+  // Find the minimum length of the triangle, and use that to calculate a scale
+  // for each dimension that will deform the image according to the triangle.
+  size = Math.min(triangleWidth, triangleHeight);
+  scaleHorizontal = size / triangleWidth;
+  scaleVertical = size / triangleHeight;
+
+  // Fetch the points nearest the top-left corner of the triangle, and use that
+  // to work out how far back from the start of the canvas to start drawing the
+  // image.
+  x = triangle.leftmostPoint().x * scaleHorizontal;
+  y = triangle.topmostPoint().y * scaleVertical;
+
+  // Scale the dimensions of the image both by the general scale and for each
+  // specific dimension.
+  imageWidth = this.scale * this.image.width * scaleHorizontal;
+  imageHeight = this.scale * this.image.height * scaleVertical;
+
+  // Draw the image, moved back to before the start of the canvas and drawn past
+  // the end of the canvas for the area that needs to be clipped as a rectangle.
+  context.drawImage(this.image, -x, -y, imageWidth, imageHeight);
+};
+
+// Draw multiple triangles of the given image to make the full pattern.
+CatsEye.prototype.drawTriangles = function (triangle) {
+  var context, i, j, leftmostPoint, squared;
+
+  context = this.canvas.getContext("2d");
+
+  // Square the triangle, which will be used for the clipping.
+  squared = triangle.squared();
+
   for (i = 0; i < 4; i += 1) {
+    // Draw a triangle and its reflection.
     for (j = 0; j < 2; j += 1) {
-      // Draw a triangle and its reflection.
+      // Reflect the context (this will be undone in the next loop).
       context.scale(1, -1);
-      this.clipTriangle(triangle);
+
+      // Save the context to ensure the clip does not apply in the future, then
+      // clip the triangle and draw the image.
+      context.save();
+      this.clipTriangle(squared);
+      this.drawImage(triangle);
+      context.restore();
     }
 
     // Draw the inner loop at each of 4 rotation points around the origin.
@@ -273,23 +340,31 @@ CatsEye.prototype.clipTriangles = function (triangle) {
   }
 };
 
-// Make a single render on a new canvas from the given image, to be repeated as
-// a pattern. The size indicates the length of each dimension of the resulting
-// canvas.
+// Make a single render on a canvas for the current image, to be repeated as a
+// pattern. The given triangle will be squared to ensure a consistent pattern
+// with no gaps.
 CatsEye.prototype.makePattern = function (triangle) {
+  var size;
+
+  // Scale the triangle to the render's scale.
+  triangle = triangle.scaled(this.scale);
+
+  // Fetch the minimum dimension of the triangle.
+  size = triangle.squared().width();
+
   // Make the canvas with edges of length twice the size of the triangle, given
   // that the image will be drawn twice in both dimensions, then scaled to the
   // tile scale value. These values are maxed out at 1 to ensure the canvas is
   // large enough to draw on.
-  this.canvas.width = Math.max(1, triangle.width() * 2 * this.scale);
-  this.canvas.height = Math.max(1, triangle.height() * 2 * this.scale);
+  this.canvas.width = Math.max(1, size * 2);
+  this.canvas.height = Math.max(1, size * 2);
 
   // Move the origin into the middle of the canvas.
-  this.canvas.getContext("2d").translate(this.canvas.width / 2,
-                                         this.canvas.height / 2);
+  this.canvas.getContext("2d").translate(size, size);
 
-  // Draw the pattern and return the canvas.
-  this.clipTriangles(triangle);
+  // Draw the pattern with a squared form of the given triangle and return the
+  // canvas.
+  this.drawTriangles(triangle);
   return this.canvas;
 };
 
@@ -505,7 +580,7 @@ function storeDimension(name, value) {
 }
 
 // Try to fetch the stored value for the given dimension. Returns NaN if no
-// value has been saved of if local storage is not supported by the platform.
+// value has been saved or if local storage is not supported by the platform.
 function fetchDimension(name) {
   // Check if localStorage is available, and if a dimension has been stored.
   if (typeof localStorage === "object" && localStorage[name]) {
@@ -529,6 +604,45 @@ function validateAndStoreDimension(element) {
 
   // Store the value in persistent storage.
   storeDimension(element.id, element.value);
+}
+
+// Try and save the given selection triangle in the persistent store. Does
+// nothing if the local storage is not supported by the platform.
+function storeSelectionTriangle(triangle) {
+  // Check if localStorage is available.
+  if (typeof localStorage === "object") {
+    // Save the information as a JSON string. The triangle will naturally render
+    // the appropriate elements.
+    localStorage.selectionTriangle = JSON.stringify(triangle);
+  }
+}
+
+// Try to fetch the stored selection triangle properties as a record
+// object. Returns null if no value has been saved or if local storage is not
+// supported by the platform.
+function fetchSelectionTriangle() {
+  // Check if localStorage is available, and if a triangle has been stored.
+  if (typeof localStorage === "object" && localStorage.selectionTriangle) {
+    try {
+      // Attempt to parse the saved image.
+      return Triangle.fromJSON(JSON.parse(localStorage.selectionTriangle));
+    } catch (error) {
+      // If the parsing failed, the information can't be used and should just
+      // be deleted.
+      delete localStorage.selectionTriangle;
+      return null;
+    }
+  }
+
+  return null;
+}
+
+// Drop any stored selection triangle from the persistent storage.
+function dropSelectionTriangle() {
+  // Check if localStorage is available.
+  if (typeof localStorage === "object") {
+    delete localStorage.selectionTriangle;
+  }
 }
 
 // Try and load the last image as a pattern, if such an image exists, passing
@@ -555,11 +669,38 @@ function tryReloadLastDimension(element) {
   }
 }
 
+// Try and reload the last selection triangle, bounded by the given image.
+function tryReloadLastSelectionTriangle(image) {
+  // Fetch the last triangle information.
+  var i, point, triangle;
+
+  triangle = fetchSelectionTriangle();
+
+  // Bounds-check the triangle if it exists.
+  if (triangle) {
+    // If any of the triangle points exceed the bounds of the image, the triangle
+    // can't have been for this image so should just be dropped.
+    for (i = 0; i < 3; i += 1) {
+      point = triangle[i];
+
+      if (point.x < 0 || point.x > image.width ||
+          point.y < 0 || point.y > image.height) {
+        // The triangle is invalid for the current image: delete it and return
+        // null.
+        dropSelectionTriangle();
+        return null;
+      }
+    }
+  }
+
+  return triangle;
+}
+
 
 // Set up the button events once the page is loaded.
 window.addEventListener("load", function () {
-  var catsEye, patternUpdate, preview, saveButton, saveHeight, saveWidth, saver,
-      selection, tileReset, tileScale;
+  var catsEye, dragCorner, patternUpdate, preview, saveButton, saveHeight,
+      saveWidth, saver, selection, tileReset, tileScale;
 
   // Set up the preview and selection objects.
   preview = new PatternPreview(document.getElementById("preview-canvas"));
@@ -613,14 +754,15 @@ window.addEventListener("load", function () {
   // Update the pattern with the current image and tile dimension values, and
   // redraw the preview canvas.
   function updatePattern() {
-    var pattern = catsEye.makePattern(selection.triangle.squared());
+    var pattern = catsEye.makePattern(selection.triangle);
 
     saver.setPattern(pattern);
     preview.setPattern(pattern);
   }
 
-  // Set up the preview image and save button from the given image information.
-  function setupFromImageInfo(name, type, image) {
+  // Set up the preview image and save button from the given image information,
+  // and optionally a selection triangle.
+  function setupFromImageInfo(name, type, image, triangle) {
     // Create a new cats-eye creator for the new image.
     catsEye = new CatsEye(image, parseInt(tileScale.value, 10) / 100);
 
@@ -628,7 +770,7 @@ window.addEventListener("load", function () {
     saver = new PatternSaver(name, type);
 
     // Update the selection canvas with the new image.
-    selection.setImage(image);
+    selection.setImage(image, triangle);
 
     // Create the initial pattern and draw the preview.
     updatePattern();
@@ -667,8 +809,9 @@ window.addEventListener("load", function () {
     selectImage(function (file) {
       // Load the image as a pattern and store it if possible.
       buildAndStoreImageFromFile(file, function (image) {
-        // Reset the tile size for the new image.
+        // Reset the tile and triangle selection size for the new image.
         resetTileSize(image);
+        dropSelectionTriangle();
 
         // Set up the selection, preview and save button from the image
         // information.
@@ -677,19 +820,35 @@ window.addEventListener("load", function () {
     });
   };
 
-  window.addEventListener("mousemove", function (event) {
+  // Handler for dragging a selection triangle point.
+  function moveSelectionPoint(event) {
     var scale, x, y;
 
     if (selection.triangle !== null && selection.image !== null) {
+      // Fetch the position of the mouse relative to the position of the image
+      // in the selection canvas.
       x = event.pageX - selection.canvas.offsetLeft - Selection.pointRadius;
       y = event.pageY - selection.canvas.offsetTop - Selection.pointRadius;
 
+      // Scale the points to the selection, and ensure the points are bound by
+      // the selection box.
       scale = selection.calculateScale();
-
       x = Math.min(Math.max(0, x / scale), selection.image.width);
-      // y = Math.min(Math.max(0, y / scale), selection.image.height);
+      y = Math.min(Math.max(0, y / scale), selection.image.height);
 
-      selection.triangle[0] = new Point(x, selection.triangle[0].y);
+      // Move the corner to the new point.
+      selection.triangle[dragCorner] = new Point(x, y);
+
+      // Adjust the other corners to ensure the triangle remains right-angled.
+      if (dragCorner === 0) {
+        selection.triangle[1] = new Point(selection.triangle[1].x, y);
+      } else if (dragCorner === 1) {
+        selection.triangle[0] = new Point(selection.triangle[0].x, y);
+        selection.triangle[2] = new Point(x, selection.triangle[2].y);
+      } else if (dragCorner === 2) {
+        selection.triangle[1] = new Point(x, selection.triangle[1].y);
+      }
+
       selection.draw();
 
       // Update the pattern in 20ms, but if a move is made within that time
@@ -697,10 +856,54 @@ window.addEventListener("load", function () {
       clearTimeout(patternUpdate);
       patternUpdate = setTimeout(updatePattern, 20);
     }
+  }
+
+  // Handler for stopping a drag of a selection triangle point.
+  function stopSelectionMove() {
+    window.removeEventListener("mousemove", moveSelectionPoint);
+    window.removeEventListener("mouseup", stopSelectionMove);
+    storeSelectionTriangle(selection.triangle);
+  }
+
+  // Set up the mouse interaction with the selection triangle.
+  selection.canvas.addEventListener("mousedown", function (event) {
+    var i, point, radius, scale, x, y;
+
+    // Only proceed if the selection has a triangle to select.
+    if (selection.triangle !== null && selection.image !== null) {
+      // Fetch the radius of the selection points.
+      radius = Selection.pointRadius;
+
+      // Fetch the position of the mouse relative to the position of the image
+      // in the selection canvas.
+      x = event.pageX - selection.canvas.offsetLeft - radius;
+      y = event.pageY - selection.canvas.offsetTop - radius;
+
+      // Scale the points to the selection.
+      scale = selection.calculateScale();
+      point = new Point(x / scale, y / scale);
+
+      // For each point, check if the mouse is on top of the point.
+      for (i = 0; i < 3; i += 1) {
+        // The radius has to be scaled as well, because the points we are
+        // comparing have already been scaled.
+        if (selection.triangle[i].isWithin(point, radius / scale)) {
+          // If it is, store which point, add the drag listeners, and exit this
+          // handler.
+          dragCorner = i;
+          window.addEventListener("mousemove", moveSelectionPoint);
+          window.addEventListener("mouseup", stopSelectionMove);
+          return;
+        }
+      }
+    }
   });
 
-  // Load the last used image, if possible.
-  tryReloadLastImage(setupFromImageInfo);
+  // Load the last used image and selection, if possible.
+  tryReloadLastImage(function (name, type, image) {
+    setupFromImageInfo(name, type, image,
+                       tryReloadLastSelectionTriangle(image));
+  });
 });
 
 // Set up dimension groups appearing on mouse hover.
