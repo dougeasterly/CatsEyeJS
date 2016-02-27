@@ -238,7 +238,7 @@ Selection.prototype.draw = function () {
   context.restore();
 
   // Show the canvas if it was hidden.
-  this.canvas.parentNode.style.display = "block";
+  this.canvas.parentNode.style.display = "inline-block";
 };
 
 
