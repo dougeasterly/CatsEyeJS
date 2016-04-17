@@ -428,15 +428,20 @@ PatternSaver.prototype.renderToDataURL = function (width, height) {
 
 // Perform the save of this object's pattern, rendered to an image of the given
 // dimensions.
-PatternSaver.prototype.save = function (width, height) {
+PatternSaver.prototype.saveImage = function (width, height) {
   // Construct a link to simulate a click on.
   var link = document.createElement("a");
 
   // Set the properties of the link from the given information, and dispatch a
   // click to the link to trigger the download.
-  link.download = "cats-eye-" + this.name;
+  link.download = "catseye-" + width + "x" + height + "-" + this.name;
   link.href = this.renderToDataURL(width, height);
   link.dispatchEvent(new MouseEvent("click"));
+};
+
+// Perform an image save as above, but use the width and height of the tile.
+PatternSaver.prototype.saveTile = function () {
+  this.saveImage(this.pattern.width, this.pattern.height);
 };
 
 
@@ -699,8 +704,9 @@ function tryReloadLastSelectionTriangle(image) {
 
 // Set up the button events once the page is loaded.
 window.addEventListener("load", function () {
-  var catsEye, dragCorner, patternUpdate, preview, saveButton, saveHeight,
-      saveWidth, saver, selection, tileReset, tileScale;
+  var catsEye, dragCorner, patternUpdate, preview,
+      saveImageButton, saveTileButton, saveHeight, saveWidth, saver,
+      selection, tileReset, tileScale;
 
   // Set up the preview and selection objects.
   preview = new PatternPreview(document.getElementById("preview-canvas"));
@@ -711,7 +717,8 @@ window.addEventListener("load", function () {
   saver = null;
 
   // Grab the save interface.
-  saveButton = document.getElementById("save-image");
+  saveTileButton = document.getElementById("save-tile");
+  saveImageButton = document.getElementById("save-image");
   saveWidth = document.getElementById("save-width");
   saveHeight = document.getElementById("save-height");
 
@@ -794,13 +801,19 @@ window.addEventListener("load", function () {
       tileScale.onchange();
     };
 
-    // Enable the save button.
-    saveButton.disabled = false;
+    // Enable the save buttons.
+    saveTileButton.disabled = false;
+    saveImageButton.disabled = false;
   }
 
-  // Save the current render when the save button is clicked.
-  saveButton.onclick = function () {
-    saver.save(saveWidth.value, saveHeight.value);
+  // Save the current tile with this save button is clicked.
+  saveTileButton.onclick = function () {
+    saver.saveTile();
+  };
+
+  // Save the current render when this save button is clicked.
+  saveImageButton.onclick = function () {
+    saver.saveImage(saveWidth.value, saveHeight.value);
   };
 
   // Select and load an image when the load image button is clicked.
@@ -935,7 +948,7 @@ window.addEventListener("load", function () {
   var saveDimensions, saveGroup, tileDimensions, tileGroup;
 
   // Fetch the groups around the elements.
-  saveGroup = document.getElementById("save-group");
+  saveGroup = document.getElementById("save-image-group");
   saveDimensions = document.getElementById("save-dimensions");
   tileGroup = document.getElementById("tile-group");
   tileDimensions = document.getElementById("tile-dimensions");
