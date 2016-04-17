@@ -22,6 +22,11 @@ Point.fromJSON = function (object) {
   return new Point(object.x, object.y);
 };
 
+// Construct a copy of this point.
+Point.prototype.copy = function () {
+  return new Point(this.x, this.y);
+};
+
 // Construct a new point by scaling this point's values.
 Point.prototype.scaled = function (scale) {
   return new Point(this.x * scale, this.y * scale);
@@ -46,6 +51,13 @@ Triangle.fromJSON = function (object) {
   return new Triangle(Point.fromJSON(object[0]),
                       Point.fromJSON(object[1]),
                       Point.fromJSON(object[2]));
+};
+
+// Construct a copy of this triangle.
+Triangle.prototype.copy = function () {
+  return new Triangle(this[0].copy(),
+                      this[1].copy(),
+                      this[2].copy());
 };
 
 // Construct a new triangle by sclaing this triangle's points.
@@ -76,7 +88,7 @@ Triangle.prototype.squared = function () {
 };
 
 // Fetch the point with the minimum of the given dimension.
-Triangle.prototype.mostPoint = function (dimension) {
+Triangle.prototype.leastPoint = function (dimension) {
   var i, point;
 
   point = this[0];
@@ -90,14 +102,61 @@ Triangle.prototype.mostPoint = function (dimension) {
   return point;
 };
 
-// Fetch the leftmost point of the triangle.
+// Fetch the point with the maximum of the given dimension.
+Triangle.prototype.mostPoint = function (dimension) {
+  var i, point;
+
+  point = this[0];
+
+  for (i = 1; i < 3; i += 1) {
+    if (this[i][dimension] > point[dimension]) {
+      point = this[i];
+    }
+  }
+
+  return point;
+};
+
+// Fetch the left-most point of the triangle.
 Triangle.prototype.leftmostPoint = function () {
+  return this.leastPoint("x");
+};
+
+// Fetch the right-most point of the triangle.
+Triangle.prototype.rightmostPoint = function () {
   return this.mostPoint("x");
 };
 
-// Fetch the topmost point of the triangle.
+// Fetch the top-most point of the triangle.
 Triangle.prototype.topmostPoint = function () {
+  return this.leastPoint("y");
+};
+
+// Fetch the bottom-most point of the triangle.
+Triangle.prototype.bottommostPoint = function () {
   return this.mostPoint("y");
+};
+
+// Calculate the signed area of this triangle.
+Triangle.prototype.area = function () {
+  return 1 / 2 * (-this[1].y * this[2].x + this[0].y *
+                  (-this[1].x + this[2].x) + this[0].x *
+                  (this[1].y - this[2].y) + this[1].x * this[2].y);
+};
+
+// Whether the given point is inside the dimensions of the triangle.
+Triangle.prototype.isInside = function (point) {
+  var a, s, t;
+
+  a = this.area();
+  s = 1 / (2 * a) * (this[0].y * this[2].x - this[0].x * this[2].y +
+                     (this[2].y - this[0].y) * point.x +
+                     (this[0].x - this[2].x) * point.y);
+  t = 1 / (2 * a) * (this[0].x * this[1].y - this[0].y * this[1].x +
+                     (this[0].y - this[1].y) * point.x +
+                     (this[1].x - this[0].x) * point.y);
+
+  return 0 <= s && s <= 1 && 0 <= t && t <= 1 && s + t <= 1;
 };
 
 
@@ -704,7 +763,7 @@ function tryReloadLastSelectionTriangle(image) {
 
 // Set up the button events once the page is loaded.
 window.addEventListener("load", function () {
-  var catsEye, dragCorner, patternUpdate, preview,
+  var catsEye, dragCorner, dragPoint, dragTriangle, patternUpdate, preview,
       saveImageButton, saveTileButton, saveHeight, saveWidth, saver,
       selection, tileReset, tileScale;
 
@@ -837,44 +896,88 @@ window.addEventListener("load", function () {
   function moveSelectionPoint(event) {
     var scale, x, y;
 
-    if (selection.triangle !== null && selection.image !== null) {
-      // Fetch the position of the mouse relative to the position of the image
-      // in the selection canvas.
-      x = event.pageX - selection.canvas.offsetLeft - Selection.pointRadius;
-      y = event.pageY - selection.canvas.offsetTop - Selection.pointRadius;
+    // Fetch the position of the mouse relative to the position of the image
+    // in the selection canvas.
+    x = event.pageX - selection.canvas.offsetLeft - Selection.pointRadius;
+    y = event.pageY - selection.canvas.offsetTop - Selection.pointRadius;
 
-      // Scale the points to the selection, and ensure the points are bound by
-      // the selection box.
-      scale = selection.calculateScale();
-      x = Math.min(Math.max(0, x / scale), selection.image.width);
-      y = Math.min(Math.max(0, y / scale), selection.image.height);
+    // Scale the points to the selection, and ensure the points are bound by
+    // the selection box.
+    scale = selection.calculateScale();
+    x = Math.min(Math.max(0, x / scale), selection.image.width);
+    y = Math.min(Math.max(0, y / scale), selection.image.height);
 
-      // Move the corner to the new point.
-      selection.triangle[dragCorner] = new Point(x, y);
+    // Move the corner to the new point.
+    selection.triangle[dragCorner] = new Point(x, y);
 
-      // Adjust the other corners to ensure the triangle remains right-angled.
-      if (dragCorner === 0) {
-        selection.triangle[1] = new Point(selection.triangle[1].x, y);
-      } else if (dragCorner === 1) {
-        selection.triangle[0] = new Point(selection.triangle[0].x, y);
-        selection.triangle[2] = new Point(x, selection.triangle[2].y);
-      } else if (dragCorner === 2) {
-        selection.triangle[1] = new Point(x, selection.triangle[1].y);
-      }
-
-      selection.draw();
-
-      // Update the pattern in 20ms, but if a move is made within that time
-      // cancel the update and let the next move redraw.
-      clearTimeout(patternUpdate);
-      patternUpdate = setTimeout(updatePattern, 20);
+    // Adjust the other corners to ensure the triangle remains right-angled.
+    if (dragCorner === 0) {
+      selection.triangle[1] = new Point(selection.triangle[1].x, y);
+    } else if (dragCorner === 1) {
+      selection.triangle[0] = new Point(selection.triangle[0].x, y);
+      selection.triangle[2] = new Point(x, selection.triangle[2].y);
+    } else if (dragCorner === 2) {
+      selection.triangle[1] = new Point(x, selection.triangle[1].y);
     }
+
+    // Redraw the triangle in the selection box.
+    selection.draw();
+
+    // Update the pattern in 20ms, but if a move is made within that time
+    // cancel the update and let the next move redraw.
+    clearTimeout(patternUpdate);
+    patternUpdate = setTimeout(updatePattern, 20);
+  }
+
+  // Handler for dragging a selection triangle.
+  function moveSelectionTriangle(event) {
+    var dx, dy, i, scale, triangle, x, y;
+
+    // Fetch the position of the mouse relative to the position of the image
+    // in the selection canvas.
+    x = event.pageX - selection.canvas.offsetLeft - Selection.pointRadius;
+    y = event.pageY - selection.canvas.offsetTop - Selection.pointRadius;
+
+    // Scale the points to the selection, and ensure the points are bound by the
+    // selection box.
+    scale = selection.calculateScale();
+    x = Math.min(Math.max(0, x / scale), selection.image.width);
+    y = Math.min(Math.max(0, y / scale), selection.image.height);
+
+    // Calculate the change in the dimensions from the last point.
+    dx = x - dragPoint.x;
+    dy = y - dragPoint.y;
+
+    // Move the selection triangle accordingly, also bounded by the selection
+    // box.
+    triangle = selection.triangle;
+    for (i = 0; i < 3; i += 1) {
+      triangle[i].x = Math.min(Math.max(0, dragTriangle[i].x + dx),
+                               selection.image.width);
+      triangle[i].y = Math.min(Math.max(0, dragTriangle[i].y + dy),
+                               selection.image.height);
+    }
+
+    // Redraw the triangle in the selection box.
+    selection.draw();
+
+    // Update the pattern in 20ms, but if a move is made within that time
+    // cancel the update and let the next move redraw.
+    clearTimeout(patternUpdate);
+    patternUpdate = setTimeout(updatePattern, 20);
   }
 
   // Handler for stopping a drag of a selection triangle point.
-  function stopSelectionMove() {
+  function stopSelectionPointMove() {
     window.removeEventListener("mousemove", moveSelectionPoint);
-    window.removeEventListener("mouseup", stopSelectionMove);
+    window.removeEventListener("mouseup", stopSelectionPointMove);
+    storeSelectionTriangle(selection.triangle);
+  }
+
+  // Handler for stopping a drag of a selection triangle.
+  function stopSelectionTriangleMove() {
+    window.removeEventListener("mousemove", moveSelectionTriangle);
+    window.removeEventListener("mouseup", stopSelectionTriangleMove);
     storeSelectionTriangle(selection.triangle);
   }
 
@@ -905,9 +1008,19 @@ window.addEventListener("load", function () {
           // handler.
           dragCorner = i;
           window.addEventListener("mousemove", moveSelectionPoint);
-          window.addEventListener("mouseup", stopSelectionMove);
+          window.addEventListener("mouseup", stopSelectionPointMove);
           return;
         }
+      }
+
+      // Otherwise check if the mouse is inside of the triangle.
+      if (selection.triangle.isInside(point)) {
+        // If it is, store the point where it was clicked and the original
+        // triangle, and add the drag listeners.
+        dragPoint = point;
+        dragTriangle = selection.triangle.copy();
+        window.addEventListener("mousemove", moveSelectionTriangle);
+        window.addEventListener("mouseup", stopSelectionTriangleMove);
       }
     }
   });
