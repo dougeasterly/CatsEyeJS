@@ -1009,6 +1009,9 @@ window.addEventListener("load", function () {
   function moveSelectionTriangle(event) {
     var dx, dy, i, scale, triangle, x, y;
 
+    // Don't notify the page of the drag.
+    event.preventDefault();
+
     // Fetch the position of the mouse relative to the position of the image
     // in the selection canvas.
     x = event.pageX - selection.canvas.offsetLeft - Selection.pointRadius;
@@ -1063,6 +1066,9 @@ window.addEventListener("load", function () {
   // Set up the mouse interaction with the selection triangle.
   function handleSelectionDrag(event) {
     var i, point, radius, scale, x, y;
+
+    // Don't notify the page of the drag.
+    event.preventDefault();
 
     // Only proceed if the selection has a triangle to select.
     if (selection.triangle !== null && selection.image !== null) {
