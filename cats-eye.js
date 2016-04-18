@@ -340,10 +340,11 @@ CatsEye.prototype.clipTriangle = function (triangle) {
 
   // Path a triangle directly over the canvas: the canvas has already been sized
   // to the dimensions of the triangle, so the triangle we clip is directly over
-  // the canvas.
-  this.pathTriangle(new Triangle(new Point(0, 0),
-                                 new Point(width, 0),
-                                 new Point(width, height)));
+  // the canvas. The points are adjusted slightly to account for gaps in certain
+  // browser canvas rendering.
+  this.pathTriangle(new Triangle(new Point(-2, -1),
+                                 new Point(width, -1),
+                                 new Point(width, height + 2)));
 
   // Clip the following image draw to that triangle path.
   context.clip();
