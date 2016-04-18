@@ -1045,19 +1045,23 @@ window.addEventListener("load", function () {
   // Handler for stopping a drag of a selection triangle point.
   function stopSelectionPointMove() {
     window.removeEventListener("mousemove", moveSelectionPoint);
+    window.removeEventListener("touchmove", moveSelectionPoint);
     window.removeEventListener("mouseup", stopSelectionPointMove);
+    window.removeEventListener("touchend", stopSelectionPointMove);
     storeSelectionTriangle(selection.triangle);
   }
 
   // Handler for stopping a drag of a selection triangle.
   function stopSelectionTriangleMove() {
     window.removeEventListener("mousemove", moveSelectionTriangle);
+    window.removeEventListener("touchmove", moveSelectionTriangle);
     window.removeEventListener("mouseup", stopSelectionTriangleMove);
+    window.removeEventListener("touchend", stopSelectionTriangleMove);
     storeSelectionTriangle(selection.triangle);
   }
 
   // Set up the mouse interaction with the selection triangle.
-  selection.canvas.addEventListener("mousedown", function (event) {
+  function handleSelectionDrag(event) {
     var i, point, radius, scale, x, y;
 
     // Only proceed if the selection has a triangle to select.
@@ -1083,7 +1087,9 @@ window.addEventListener("load", function () {
           // handler.
           dragCorner = i;
           window.addEventListener("mousemove", moveSelectionPoint);
+          window.addEventListener("touchmove", moveSelectionPoint);
           window.addEventListener("mouseup", stopSelectionPointMove);
+          window.addEventListener("touchend", stopSelectionPointMove);
           return;
         }
       }
@@ -1095,10 +1101,15 @@ window.addEventListener("load", function () {
         dragPoint = point;
         dragTriangle = selection.triangle.copy();
         window.addEventListener("mousemove", moveSelectionTriangle);
+        window.addEventListener("touchmove", moveSelectionTriangle);
         window.addEventListener("mouseup", stopSelectionTriangleMove);
+        window.addEventListener("touchend", stopSelectionTriangleMove);
       }
     }
-  });
+  }
+
+  selection.canvas.addEventListener("mousedown", handleSelectionDrag);
+  selection.canvas.addEventListener("touchstart", handleSelectionDrag);
 
   // Load the last used image and selection, if possible.
   tryReloadLastImage(function (name, type, image) {
