@@ -296,8 +296,18 @@ Selection.prototype.draw = function () {
   // Restore the context state before exiting.
   context.restore();
 
-  // Show the canvas if it was hidden.
+  // Show the selection pane if it was hidden.
   this.canvas.parentNode.style.display = "inline-block";
+};
+
+// Remove the current image and hide the selection pane.
+Selection.prototype.reset = function () {
+  // Reset the state of the selection.
+  this.image = null;
+  this.triangle = null;
+
+  // Show the selection pane if it was shown.
+  this.canvas.parentNode.style.display = "none";
 };
 
 
@@ -601,22 +611,35 @@ function buildAndStoreImageFromFile(file, callback) {
 }
 
 // Try and save the given data about an image in the persistent store as the
-// most recent image to be loaded. Does nothing if local storage is not
-// supported by the platform.
+// most recent image to be loaded. Alerts the user if local storage is not
+// supported by the platform or the image is too big.
 function storeLastImage(name, type, url) {
-  // Check if localStorage is available.
-  if (typeof localStorage === "object") {
-    // Save the information as a JSON string.
-    localStorage.image = JSON.stringify({
-      "name": name,
-      "type": type,
-      "url": url
-    });
+  try {
+    if (typeof localStorage === "object") {
+      // Remove the old image, in case the storage fails.
+      delete localStorage.image;
+
+      // Save the information as a JSON string.
+      localStorage.image = JSON.stringify({
+        "name": name,
+        "type": type,
+        "url": url
+      });
+    } else {
+      alert("Failed to store the image: " +
+            "your browser doesn't support local storage.\n\n" +
+            "You can continue as normal, but be aware that your work " +
+            "will not be saved if the page is closed.");
+    }
+  } catch (error) {
+    alert("Failed to store the image: it's probably too big.\n\n" +
+          "You can continue as normal, but be aware that your work " +
+          "will not be saved if the page is closed.");
   }
 }
 
 // Try to fetch data about the most recent image. Returns null if no image has
-// been saved of if local storage is not supported by the platform.
+// been saved or if local storage is not supported by the platform.
 function fetchLastImage() {
   // Check if localStorage is available, and if an image has been saved.
   if (typeof localStorage === "object" && localStorage.image) {
@@ -634,13 +657,26 @@ function fetchLastImage() {
   return null;
 }
 
+// Drop the last image from local storage. Does nothing if no image has been
+// saved or if local storage is not supported by the platform.
+function dropLastImage() {
+  // Check if localStorage is available, and if an image has been saved.
+  if (typeof localStorage === "object" && localStorage.image) {
+    delete localStorage.image;
+  }
+}
+
 // Try and save the given dimension value in the persistent store for the given
 // name. Does nothing if local storage is not supported by the platform.
 function storeDimension(name, value) {
-  // Check if localStorage is available.
-  if (typeof localStorage === "object") {
-    localStorage[name] = value;
-  }
+  // Check if localStorage is available, failing silently otherwise or if the
+  // store causes an error: if this is failing, the user will probably have
+  // already encountered the error when loading the image.
+  try {
+    if (typeof localStorage === "object" && localStorage.image) {
+      localStorage[name] = value;
+    }
+  } catch (error) {}
 }
 
 // Try to fetch the stored value for the given dimension. Returns NaN if no
@@ -670,15 +706,30 @@ function validateAndStoreDimension(element) {
   storeDimension(element.id, element.value);
 }
 
-// Try and save the given selection triangle in the persistent store. Does
-// nothing if the local storage is not supported by the platform.
-function storeSelectionTriangle(triangle) {
-  // Check if localStorage is available.
-  if (typeof localStorage === "object") {
-    // Save the information as a JSON string. The triangle will naturally render
-    // the appropriate elements.
-    localStorage.selectionTriangle = JSON.stringify(triangle);
+// Drop the dimension of the given name from local storage. Does nothing if no
+// such dimension is stored, or if local storage is not supported by the
+// platform.
+function dropDimension(name) {
+  // Check if localStorage is available, and if a dimension has been stored.
+  if (typeof localStorage === "object" && localStorage[name]) {
+    delete localStorage[name];
   }
+}
+
+// Try and save the given selection triangle in the persistent store. Does
+// nothing if the local storage is not supported by the platform, or no image
+// has been stored there.
+function storeSelectionTriangle(triangle) {
+  // Check if localStorage is available, failing silently otherwise or if the
+  // store causes an error: if this is failing, the user will probably have
+  // already encountered the error when loading the image.
+  try {
+    if (typeof localStorage === "object" && localStorage.image) {
+      // Save the information as a JSON string. The triangle will naturally
+      // render the appropriate elements.
+      localStorage.selectionTriangle = JSON.stringify(triangle);
+    }
+  } catch (error) {}
 }
 
 // Try to fetch the stored selection triangle properties as a record
@@ -835,11 +886,35 @@ window.addEventListener("load", function () {
     // Build a new pattern saver from the image information.
     saver = new PatternSaver(name, type);
 
-    // Update the selection canvas with the new image.
-    selection.setImage(image, triangle);
+    // If rendering the image fails, alert the user and trash the current
+    // context.
+    try {
+      // Update the selection canvas with the new image.
+      selection.setImage(image, triangle);
 
-    // Create the initial pattern and draw the preview.
-    updatePattern();
+      // Create the initial pattern and draw the preview.
+      updatePattern();
+    } catch (error) {
+      // Alert the user.
+      alert("Failed to render the image: it might be too big.\n\n" +
+            "If the image is large, try resizing it to be smaller " +
+            "before loading it.");
+
+      // Forget the context.
+      catsEye = null;
+      saver = null;
+
+      // Disable the interface.
+      saveTileButton.disabled = true;
+      saveImageButton.disabled = true;
+      selection.reset();
+
+      // Drop the storage without forgetting the save image dimensions.
+      dropLastImage();
+      dropDimension(tileScale.id);
+
+      return;
+    }
 
     // Draw the selection image and preview pattern when the window is resized.
     window.onresize = function () {
