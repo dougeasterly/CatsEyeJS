@@ -938,11 +938,10 @@ window.addEventListener("load", function () {
     x = event.pageX - selection.canvas.offsetLeft - Selection.pointRadius;
     y = event.pageY - selection.canvas.offsetTop - Selection.pointRadius;
 
-    // Scale the points to the selection, and ensure the points are bound by the
-    // selection box.
+    // Scale the points to the selection.
     scale = selection.calculateScale();
-    x = Math.min(Math.max(0, x / scale), selection.image.width);
-    y = Math.min(Math.max(0, y / scale), selection.image.height);
+    x /= scale;
+    y /= scale;
 
     // Calculate the change in the dimensions from the last point.
     dx = x - dragPoint.x;
