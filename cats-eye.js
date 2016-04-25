@@ -312,13 +312,15 @@ Selection.prototype.reset = function () {
 
 
 // An object to draw a cats-eye pattern.
-function CatsEye(image, scale) {
+function CatsEye(image, scale, showGrid) {
   this.canvas = document.createElement("canvas");
 
   TrianglePathing.call(this, this.canvas.getContext("2d"));
 
   this.image = image;
   this.scale = scale;
+
+  this.showGrid = showGrid;
 }
 
 CatsEye.prototype = Inherit(TrianglePathing);
@@ -328,8 +330,11 @@ CatsEye.prototype.setScale = function (scale) {
   this.scale = scale;
 };
 
-// Clip the given triangle on the current canvas.
-CatsEye.prototype.clipTriangle = function (triangle) {
+// Path a triangle directly over the canvas: the canvas has already been sized
+// to the dimensions of the triangle, so the triangle we clip is directly over
+// the canvas. The points are adjusted slightly to account for gaps in certain
+// browser canvas rendering.
+CatsEye.prototype.pathDefaultTriangle = function (triangle) {
   var context, height, width;
 
   context = this.canvas.getContext("2d");
@@ -338,13 +343,28 @@ CatsEye.prototype.clipTriangle = function (triangle) {
   width = triangle.width();
   height = triangle.height();
 
-  // Path a triangle directly over the canvas: the canvas has already been sized
-  // to the dimensions of the triangle, so the triangle we clip is directly over
-  // the canvas. The points are adjusted slightly to account for gaps in certain
-  // browser canvas rendering.
-  this.pathTriangle(new Triangle(new Point(-2, -1),
-                                 new Point(width, -1),
-                                 new Point(width, height + 2)));
+  this.pathTriangle(new Triangle(new Point(0, 0),
+                                 new Point(width, 0),
+                                 new Point(width, height)));
+};
+
+// Draw the given triangle on the current canvas.
+CatsEye.prototype.drawTriangle = function (triangle) {
+  var context = this.canvas.getContext("2d");
+
+  // Path the default triangle.
+  this.pathDefaultTriangle(triangle);
+
+  // Draw along the path.
+  context.stroke();
+};
+
+// Clip the given triangle on the current canvas.
+CatsEye.prototype.clipTriangle = function (triangle) {
+  var context = this.canvas.getContext("2d");
+
+  // Path the default triangle.
+  this.pathDefaultTriangle(triangle);
 
   // Clip the following image draw to that triangle path.
   context.clip();
@@ -402,6 +422,17 @@ CatsEye.prototype.drawTriangles = function (triangle) {
       context.save();
       this.clipTriangle(squared);
       this.drawImage(triangle);
+
+      // If the application has been asked to draw the clipping grid, do so.
+      if (this.showGrid) {
+        context.lineWidth = 6;
+        context.strokeStyle = "black";
+        this.drawTriangle(squared);
+        context.lineWidth = 2;
+        context.strokeStyle = "white";
+        this.drawTriangle(squared);
+      }
+
       context.restore();
     }
 
@@ -761,6 +792,34 @@ function dropSelectionTriangle() {
   }
 }
 
+// Try and save the given show grid setting. Does nothing if the local storage
+// is not supported by the platform, or no image has been stored there.
+function storeShowGrid(value) {
+  // Check if localStorage is available, failing silently otherwise or if the
+  // store causes an error: if this is failing, the user will probably have
+  // already encountered the error when loading the image.
+  try {
+    if (typeof localStorage === "object" && localStorage.image) {
+      // Store true if the value should be set, and delete it otherwise.
+      if (value) {
+        localStorage.showGrid = true;
+      } else {
+        delete localStorage.showGrid;
+      }
+    }
+  } catch (error) {}
+}
+
+// Try to fetch the stored show grid setting. Defaults to false if no value has
+// been saved or if local storage is not supported by the platform.
+function fetchShowGrid() {
+  if (typeof localStorage === "object" && localStorage.showGrid) {
+    return Boolean(localStorage.showGrid);
+  }
+
+  return false;
+}
+
 // Try and load the last image as a pattern, if such an image exists, passing
 // the image's name, type, and loaded pattern to the given callback.
 function tryReloadLastImage(callback) {
@@ -817,7 +876,7 @@ function tryReloadLastSelectionTriangle(image) {
 window.addEventListener("load", function () {
   var catsEye, dragCorner, dragPoint, dragTriangle, patternUpdate, preview,
       saveImageButton, saveTileButton, saveHeight, saveWidth, saver,
-      selection, tileReset, tileScale;
+      selection, tileReset, tileScale, toggleGrid;
 
   // Set up the preview and selection objects.
   preview = new PatternPreview(document.getElementById("preview-canvas"));
@@ -836,6 +895,9 @@ window.addEventListener("load", function () {
   // Grab the tile interface.
   tileScale = document.getElementById("tile-scale");
   tileReset = document.getElementById("tile-reset");
+
+  // Grab the toggle grid button.
+  toggleGrid = document.getElementById("toggle-grid");
 
   // Clicking on a label when the values are set by the corresponding attribute
   // in the element can cause the caret to end up on the wrong side of the
@@ -882,7 +944,8 @@ window.addEventListener("load", function () {
   // and optionally a selection triangle.
   function setupFromImageInfo(name, type, image, triangle) {
     // Create a new cats-eye creator for the new image.
-    catsEye = new CatsEye(image, parseInt(tileScale.value, 10) / 100);
+    catsEye = new CatsEye(image, parseInt(tileScale.value, 10) / 100,
+                          toggleGrid.dataset.showing);
 
     // Build a new pattern saver from the image information.
     saver = new PatternSaver(name, type);
@@ -1117,6 +1180,44 @@ window.addEventListener("load", function () {
   selection.canvas.addEventListener("mousedown", handleSelectionDrag);
   selection.canvas.addEventListener("touchstart", handleSelectionDrag);
 
+  function showGrid() {
+    toggleGrid.dataset.showing = true;
+    toggleGrid.innerText = "Hide Grid";
+    storeShowGrid(true);
+
+    if (catsEye) {
+      catsEye.showGrid = true;
+      updatePattern();
+    }
+  }
+
+  function hideGrid() {
+    delete toggleGrid.dataset.showing;
+    toggleGrid.innerText = "Show Grid";
+    storeShowGrid(false);
+
+    if (catsEye) {
+      catsEye.showGrid = false;
+      updatePattern();
+    }
+  }
+
+  // Set the stored show grid setting, which defaults to false.
+  if (fetchShowGrid()) {
+    showGrid();
+  } else {
+    hideGrid();
+  }
+
+  // Toggle the show grid setting when the toggle button is clicked.
+  toggleGrid.addEventListener("click", function () {
+    if (toggleGrid.dataset.showing) {
+      hideGrid();
+    } else {
+      showGrid();
+    }
+  });
+
   // Load the last used image and selection, if possible.
   tryReloadLastImage(function (name, type, image) {
     setupFromImageInfo(name, type, image,
@@ -1125,40 +1226,40 @@ window.addEventListener("load", function () {
 });
 
 // Set up dimension groups appearing on mouse hover.
-function setupDimensionGroup(group, dimensions) {
+function setupAuxiliaryGroup(group, auxiliary) {
   var timeout;
 
   // Have the dimension inputs appear when the group surrounding both is hovered
   // over.
   group.onmouseover = function () {
     clearTimeout(timeout);
-    dimensions.style.transitionProperty = "none";
-    dimensions.style.opacity = 1;
-    dimensions.style.display = "inline-block";
+    auxiliary.style.transitionProperty = "none";
+    auxiliary.style.opacity = 1;
+    auxiliary.style.display = "inline-block";
   };
 
-  // Have the dimension inputs disappear over a second, and finally no longer be
+  // Have the auxiliary inputs disappear over a second, and finally no longer be
   // displayed. The fade functionality is defined in the accompanying CSS.
   group.onmouseout = function () {
-    dimensions.style.transitionProperty = "opacity";
-    dimensions.style.opacity = 0;
+    auxiliary.style.transitionProperty = "opacity";
+    auxiliary.style.opacity = 0;
     timeout = setTimeout(function () {
-      dimensions.style.display = "none";
+      auxiliary.style.display = "none";
     }, 1000);
   };
 }
 
 // Set up the save dimension interface.
 window.addEventListener("load", function () {
-  var saveDimensions, saveGroup, tileDimensions, tileGroup;
+  var saveAuxiliary, saveGroup, tileAuxiliary, tileGroup;
 
   // Fetch the groups around the elements.
   saveGroup = document.getElementById("save-image-group");
-  saveDimensions = document.getElementById("save-dimensions");
+  saveAuxiliary = document.getElementById("save-auxiliary");
   tileGroup = document.getElementById("tile-group");
-  tileDimensions = document.getElementById("tile-dimensions");
+  tileAuxiliary = document.getElementById("tile-auxiliary");
 
   // Setup the dimension group events.
-  setupDimensionGroup(saveGroup, saveDimensions);
-  setupDimensionGroup(tileGroup, tileDimensions);
+  setupAuxiliaryGroup(saveGroup, saveAuxiliary);
+  setupAuxiliaryGroup(tileGroup, tileAuxiliary);
 });

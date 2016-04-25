@@ -42,10 +42,6 @@ body, button, input {
   display: none;
 }
 
-.labelled > label {
-  cursor: text;
-}
-
 .labelled > input {
   color: white;
   border: 0px;
@@ -55,7 +51,7 @@ body, button, input {
   margin: 0px;
 }
 
-.dimensions {
+.auxiliary {
   display: none;
   transition-duration: 1s;
   transition-timing-function: ease-in;
