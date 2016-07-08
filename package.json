@@ -1,0 +1,30 @@
+{
+  "name": "cats-eye",
+  "version": "0.1.0",
+  "description": "Cats-eye tool for the web",
+  "main": "cats-eye.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DougEasterly/CatsEyeJS.git"
+  },
+  "keywords": [
+    "graphics",
+    "cats eye"
+  ],
+  "author": "Timothy Jones",
+  "license": "GPL-3.0+",
+  "devDependencies": {
+    "babel-loader": "^6.2.4",
+    "babel-polyfill": "^6.9.0",
+    "babel-preset-es2015": "^6.9.0",
+    "ts-loader": "^0.8.2",
+    "typescript": "^1.8.10",
+    "webpack": "^1.13.1",
+    "webpack-core": "^0.6.8",
+    "webpack-dev-server": "^1.14.1"
+  },
+  "scripts": {
+    "dev": "webpack-dev-server --config webpack.config.dev.js",
+    "prepublish": "webpack"
+  }
+}
